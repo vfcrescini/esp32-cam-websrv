@@ -1,7 +1,5 @@
 # esp32-cam-websrv
 
----
-
 Video streaming webserver for AI Thinker ESP32-CAM boards.
 
 Derived from Espressif's own CameraWebServer example sketch:
@@ -72,3 +70,11 @@ Configure, build and flash using the _usual_ IDF tools:
     Hard resetting via RTS pin...
     Done
     ```
+
+## Author
+
+[Vino Fernando Crescini](mailto:vfcrescini@gmail.com)
+
+## License
+
+This software is released under the GPLv3 license. For more information, see [COPYING](https://github.com/vfcrescini/esp32-cam-websrv/blob/main/COPYING).
