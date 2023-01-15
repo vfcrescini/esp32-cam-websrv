@@ -1,0 +1,7 @@
+# 2023-01-07 idf_component.yml
+# Copyright (C) 2023 Vino Fernando Crescini  <vfcrescini@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+dependencies:
+  idf: ">=4.1.0"
+  espressif/esp32-camera: ">=2.0.3"
