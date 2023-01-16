@@ -21,6 +21,7 @@ https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/
 * Standard esp-idf components:
     * esp\_event
     * esp\_http\_server
+    * esp\_timer
     * esp\_wifi
     * fatfs
     * nvs\_flash
