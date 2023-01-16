@@ -16,6 +16,10 @@
 
 #include <esp_log.h>
 #include <esp_http_server.h>
+#include <esp_timer.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #define _CAMWEBSRV_HTTPD_SERVER_PORT_1  80
 #define _CAMWEBSRV_HTTPD_SERVER_PORT_2  81
@@ -66,6 +70,12 @@
 
 #define _CAMWEBSRV_HTTPD_MULTIPART_HEADER_LEN 256
 #define _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY "U8dOTFrG6WId0hT/TDkN2gx+0TvJCcSMFl7b/3B/B1j86B1GYo3LnEh491bJJ7/BwkRWQXX"
+
+typedef struct
+{
+  httpd_req_t *req;
+  TickType_t last;
+} _camwebsrv_httpd_stream_arg_t;
 
 static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req);
@@ -489,6 +499,7 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
 static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req)
 {
   esp_err_t rv;
+  _camwebsrv_httpd_stream_arg_t *parg;
 
   // response type/header status
 
@@ -496,14 +507,30 @@ static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req)
   httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=" _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY);
   httpd_resp_set_status(req, "200 OK");
 
+  // init arg struct
+
+  parg = (_camwebsrv_httpd_stream_arg_t *) malloc(sizeof(_camwebsrv_httpd_stream_arg_t));
+
+  if (parg == NULL)
+  {
+    int e = errno;
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): malloc() failed: [%d]: %s", e, strerror(e));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    return ESP_FAIL;
+  }
+
+  parg->req = req;
+  parg->last = 0;
+
   // set frame callback
 
-  rv = camwebsrv_camera_frame(_camwebsrv_httpd_stream_cb, (void *) req);
+  rv = camwebsrv_camera_frame(_camwebsrv_httpd_stream_cb, (void *) parg);
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): camwebsrv_camera_frame() failed: [%d]: %s", rv, esp_err_to_name(rv));
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return rv;
   }
 
@@ -546,7 +573,7 @@ static bool _camwebsrv_httpd_stream_cb(const char *buf, size_t len, void *arg)
 {
   esp_err_t rv;
   char hdr[_CAMWEBSRV_HTTPD_MULTIPART_HEADER_LEN];
-  httpd_req_t *req = (httpd_req_t *) arg;
+  _camwebsrv_httpd_stream_arg_t *parg = (_camwebsrv_httpd_stream_arg_t *) arg;
 
   // multipart headers
 
@@ -554,69 +581,84 @@ static bool _camwebsrv_httpd_stream_cb(const char *buf, size_t len, void *arg)
 
   snprintf(hdr, sizeof(hdr) - 1, "\r\n");
 
-  rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
+  rv = httpd_resp_send_chunk(parg->req, hdr, strlen(hdr));
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(1) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
 
   snprintf(hdr, sizeof(hdr) - 1, "--%s\r\n", _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY);
 
-  rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
+  rv = httpd_resp_send_chunk(parg->req, hdr, strlen(hdr));
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(2) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
 
   snprintf(hdr, sizeof(hdr) - 1, "Content-Type: image/jpeg\r\n");
 
-  rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
+  rv = httpd_resp_send_chunk(parg->req, hdr, strlen(hdr));
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(3) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
 
   snprintf(hdr, sizeof(hdr) - 1, "Content-Length: %u\r\n", len);
 
-  rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
+  rv = httpd_resp_send_chunk(parg->req, hdr, strlen(hdr));
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(4) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
 
   snprintf(hdr, sizeof(hdr) - 1, "\r\n");
 
-  rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
+  rv = httpd_resp_send_chunk(parg->req, hdr, strlen(hdr));
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(5) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
 
   // body
 
-  rv = httpd_resp_send_chunk(req, buf, len);
+  rv = httpd_resp_send_chunk(parg->req, buf, len);
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_stream_cb(): httpd_resp_send_chunk(6) failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    httpd_resp_send_err(parg->req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
     return false;
   }
+
+  // sleep, if needed, to meet the configured FPS
+
+  if (parg->last == 0)
+  {
+    parg->last = xTaskGetTickCount();
+  }
+
+  xTaskDelayUntil(&(parg->last), pdMS_TO_TICKS(1000 / CAMWEBSRV_CAMERA_STREAM_FPS));
 
   return true;
 }

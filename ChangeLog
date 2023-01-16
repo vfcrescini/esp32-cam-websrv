@@ -1,5 +1,17 @@
 2023-01-17  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+	* main/httpd.c:
+
+	  - Enforce streaming frame rate limit to 4 FPS.
+
+	* main/CMakeLists.txt:
+
+	  - Added esp_timer as a required component.
+
+
+2023-01-17  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
 	* VERSION:
 
 	  - Updated to v0.0.1.br.fix_streaming

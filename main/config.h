@@ -10,6 +10,8 @@
 #define CAMWEBSRV_CFGMAN_KEY_WIFI_SSID "wifi_ssid"
 #define CAMWEBSRV_CFGMAN_KEY_WIFI_PASS "wifi_pass"
 
+#define CAMWEBSRV_CAMERA_STREAM_FPS 4
+
 // ESP32Cam (AiThinker) PIN Map
 
 #define CAMWEBSRV_PIN_PWDN 32
