@@ -4,7 +4,6 @@
 
 #include "config.h"
 #include "cfgman.h"
-#include "camera.h"
 #include "httpd.h"
 #include "storage.h"
 #include "wifi.h"
@@ -59,16 +58,6 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_wifi_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
-  }
-
-  // initialise camera
-
-  rv = camwebsrv_camera_init();
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_camera_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
     return;
   }
 

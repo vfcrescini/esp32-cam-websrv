@@ -4,7 +4,7 @@
 
 idf_component_register(
   SRCS "main.c" "camera.c" "cfgman.c" "httpd.c" "storage.c" "vbytes.c" "wifi.c"
-  PRIV_REQUIRES "esp_event" "esp_http_server" "esp_wifi" "fatfs" "freertos" "nvs_flash" "vfs"
+  PRIV_REQUIRES "esp_event" "esp_http_server" "esp_timer" "esp_wifi" "fatfs" "freertos" "nvs_flash" "vfs"
   PRIV_INCLUDE_DIRS "."
 )
 
