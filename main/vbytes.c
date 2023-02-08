@@ -113,6 +113,23 @@ esp_err_t camwebsrv_vbytes_set_str(camwebsrv_vbytes_t vb, const char *fmt, ...)
 {
   esp_err_t rv;
   va_list vlist;
+
+  va_start(vlist, fmt);
+  rv = camwebsrv_vbytes_set_vlist(vb, fmt, vlist);
+  va_end(vlist);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_str(): camwebsrv_vbytes_set_vlist() failed");
+    return ESP_FAIL;
+  }
+
+  return ESP_OK;
+}
+
+esp_err_t camwebsrv_vbytes_set_vlist(camwebsrv_vbytes_t vb, const char *fmt, va_list vlist)
+{
+  esp_err_t rv;
   int len;
   char *str = NULL;
 
@@ -121,13 +138,11 @@ esp_err_t camwebsrv_vbytes_set_str(camwebsrv_vbytes_t vb, const char *fmt, ...)
     return ESP_ERR_INVALID_ARG;
   }
 
-  va_start(vlist, fmt);
   len = _camwebsrv_vbytes_asprintf(&str, fmt, vlist);
-  va_end(vlist);
 
   if (len < 0)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_str(): _camwebsrv_vbytes_asprintf() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_vlist(): _camwebsrv_vbytes_asprintf() failed");
     return ESP_FAIL;
   }
 
@@ -140,7 +155,7 @@ esp_err_t camwebsrv_vbytes_set_str(camwebsrv_vbytes_t vb, const char *fmt, ...)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_str(): _camwebsrv_vbytes_set() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_vlist(): _camwebsrv_vbytes_set() failed");
     return ESP_FAIL;
   }
 
@@ -166,6 +181,23 @@ esp_err_t camwebsrv_vbytes_append_str(camwebsrv_vbytes_t vb, const char *fmt, ..
 {
   esp_err_t rv;
   va_list vlist;
+
+  va_start(vlist, fmt);
+  rv = camwebsrv_vbytes_append_vlist(vb, fmt, vlist);
+  va_end(vlist);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_append_str(): camwebsrv_vbytes_append_vlist() failed");
+    return ESP_FAIL;
+  }
+
+  return ESP_OK;
+}
+
+esp_err_t camwebsrv_vbytes_append_vlist(camwebsrv_vbytes_t vb, const char *fmt, va_list vlist)
+{
+  esp_err_t rv;
   int len;
   char *str = NULL;
 
@@ -174,13 +206,11 @@ esp_err_t camwebsrv_vbytes_append_str(camwebsrv_vbytes_t vb, const char *fmt, ..
     return ESP_ERR_INVALID_ARG;
   }
 
-  va_start(vlist, fmt);
   len = _camwebsrv_vbytes_asprintf(&str, fmt, vlist);
-  va_end(vlist);
 
   if (len < 0)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_append_str(): _camwebsrv_vbytes_asprintf() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_append_vlist(): _camwebsrv_vbytes_asprintf() failed");
     return ESP_FAIL;
   }
 
@@ -193,7 +223,7 @@ esp_err_t camwebsrv_vbytes_append_str(camwebsrv_vbytes_t vb, const char *fmt, ..
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_set_str(): _camwebsrv_vbytes_set() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "VBYTES camwebsrv_vbytes_append_vlist(): _camwebsrv_vbytes_append() failed");
     return ESP_FAIL;
   }
 

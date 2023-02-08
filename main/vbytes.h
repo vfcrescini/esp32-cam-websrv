@@ -18,8 +18,10 @@ esp_err_t camwebsrv_vbytes_destroy(camwebsrv_vbytes_t *vb);
 esp_err_t camwebsrv_vbytes_get_bytes(camwebsrv_vbytes_t vb, const uint8_t **bytes, size_t *len);
 esp_err_t camwebsrv_vbytes_set_bytes(camwebsrv_vbytes_t vb, const uint8_t *bytes, size_t len);
 esp_err_t camwebsrv_vbytes_set_str(camwebsrv_vbytes_t vb, const char *fmt, ...);
+esp_err_t camwebsrv_vbytes_set_vlist(camwebsrv_vbytes_t vb, const char *fmt, va_list vlist);
 esp_err_t camwebsrv_vbytes_append_bytes(camwebsrv_vbytes_t vb, const uint8_t *bytes, size_t len);
 esp_err_t camwebsrv_vbytes_append_str(camwebsrv_vbytes_t vb, const char *fmt, ...);
+esp_err_t camwebsrv_vbytes_append_vlist(camwebsrv_vbytes_t vb, const char *fmt, va_list vlist);
 size_t camwebsrv_vbytes_length(camwebsrv_vbytes_t vb);
 
 #endif

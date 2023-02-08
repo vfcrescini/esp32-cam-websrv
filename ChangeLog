@@ -1,3 +1,12 @@
+2023-02-08  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/vbytes.c:
+	* main/vbytes.h:
+
+	  - Added camwebsrv_vbytes_set_vlist() and
+	    camwebsrv_vbytes_append_vlist()
+
+
 2023-02-05  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/camera.c:
