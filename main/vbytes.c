@@ -343,7 +343,7 @@ static esp_err_t _camwebsrv_vbytes_append(_camwebsrv_vbytes_t *nvb, const uint8_
   // set fields
 
   nvb->vbs = tmp;
-  nvb->len = size;
+  nvb->len = nvb->len + len;
 
   return ESP_OK;
 }

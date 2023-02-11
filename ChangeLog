@@ -1,3 +1,10 @@
+2023-02-11  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/vbytes.c:
+
+	  - Fixed _camwebsrv_vbytes_append() length problem.
+
+
 2023-02-08  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/vbytes.c:
