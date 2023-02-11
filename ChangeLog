@@ -1,5 +1,12 @@
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+
+	  - Raised hard-coded FPS to 8.
+
+
+2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
 	* main/CMakeLists.txt:
 	* main/config.h:
 	* main/sclients.c:
