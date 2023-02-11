@@ -393,7 +393,7 @@ static esp_err_t _camwebsrv_vbytes_asprintf(char **str, const char *fmt, va_list
 
   if (fmt != NULL)
   {
-    // copy n + 1 bytes to include null byte 
+    // copy n + 1 bytes to include null byte
 
     va_copy(vcopy, vlist);
     rv = vsnprintf(tmp, len + 1, fmt, vcopy);

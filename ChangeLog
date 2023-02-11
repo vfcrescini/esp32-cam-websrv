@@ -1,5 +1,14 @@
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/main.c:
+	* main/httpd.c:
+	* main/httpd.h:
+
+	  - Stream requests are now managed asynchronously by the sclients
+	    module. Processing (really just sending frame data back to the
+	    client) is now executed at every tick of the main thread loop.
+	    Multiple concurrent stream requests are now supported.
+
 	* main/config.h:
 
 	  - Raised hard-coded FPS to 8.

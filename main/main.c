@@ -20,16 +20,17 @@ void app_main()
   esp_err_t rv;
   camwebsrv_cfgman_t cfgman;
   camwebsrv_httpd_t httpd;
+  TickType_t last;
 
   // initialise storage
-  
+
   rv = camwebsrv_storage_init();
 
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_storage_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
     return;
-  } 
+  }
 
   // initialise config manager
 
@@ -81,10 +82,20 @@ void app_main()
     return;
   }
 
-  // the do-nothing loop
+  // process stream requests indefinitely
+
+  last = xTaskGetTickCount();
 
   while(1)
   {
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    rv = camwebsrv_httpd_process(httpd);
+
+    if (rv != ESP_OK)
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_httpd_process() failed: [%d]: %s", rv, esp_err_to_name(rv));
+      return;
+    }
+
+    xTaskDelayUntil(&last, pdMS_TO_TICKS(1000 / CAMWEBSRV_CAMERA_STREAM_FPS));
   }
 }

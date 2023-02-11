@@ -5,6 +5,7 @@
 #include "config.h"
 #include "httpd.h"
 #include "camera.h"
+#include "sclients.h"
 #include "storage.h"
 
 #include <stddef.h>
@@ -16,7 +17,6 @@
 
 #include <esp_log.h>
 #include <esp_http_server.h>
-#include <esp_timer.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -68,20 +68,18 @@
 
 #define _CAMWEBSRV_HTTPD_PARAM_LEN 32
 
-#define _CAMWEBSRV_HTTPD_MULTIPART_HEADER_LEN 256
-#define _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY "U8dOTFrG6WId0hT/TDkN2gx+0TvJCcSMFl7b/3B/B1j86B1GYo3LnEh491bJJ7/BwkRWQXX"
-
-typedef struct
-{
-  httpd_req_t *req;
-  TickType_t last;
-} _camwebsrv_httpd_stream_arg_t;
-
 typedef struct
 {
   httpd_handle_t handles[2];
   camwebsrv_camera_t cam;
+  camwebsrv_sclients_t sclients;
 } _camwebsrv_httpd_t;
+
+typedef struct
+{
+  int sockfd;
+  _camwebsrv_httpd_t *phttpd;
+} _camwebsrv_httpd_worker_arg_t;
 
 static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req);
@@ -89,6 +87,7 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req);
 static bool _camwebsrv_httpd_static_cb(const char *buf, size_t len, void *arg);
+static void _camwebsrv_httpd_worker(void *arg);
 static void _camwebsrv_httpd_noop(void *arg);
 
 esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd)
@@ -121,6 +120,16 @@ esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd)
     return ESP_FAIL;
   }
 
+  rv = camwebsrv_sclients_init(&(phttpd->sclients));
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_init(): camwebsrv_sclients_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    camwebsrv_camera_destroy(&(phttpd->cam));
+    free(phttpd);
+    return ESP_FAIL;
+  }
+
   *httpd = (camwebsrv_httpd_t) phttpd;
 
   return ESP_OK;
@@ -139,6 +148,20 @@ esp_err_t camwebsrv_httpd_destroy(camwebsrv_httpd_t *httpd)
 
   phttpd = (_camwebsrv_httpd_t *) *httpd;
 
+  rv = camwebsrv_sclients_destroy(&(phttpd->sclients), phttpd->handles[1]);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): camwebsrv_sclients_destroy() failed: [%d]: %s", rv, esp_err_to_name(rv));
+  }
+
+  rv = camwebsrv_camera_destroy(&(phttpd->cam));
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): camwebsrv_camera_destroy() failed: [%d]: %s", rv, esp_err_to_name(rv));
+  }
+
   for(i = 0; i < 2; i++)
   {
     if (phttpd->handles[i] != NULL)
@@ -150,13 +173,6 @@ esp_err_t camwebsrv_httpd_destroy(camwebsrv_httpd_t *httpd)
         ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): httpd_stop(%d) failed: [%d]: %s", i, rv, esp_err_to_name(rv));
       }
     }
-  }
-
-  rv = camwebsrv_camera_destroy(&(phttpd->cam));
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): camwebsrv_camera_destroy() failed: [%d]: %s", rv, esp_err_to_name(rv));
   }
 
   free(phttpd);
@@ -184,9 +200,9 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
 
   c.server_port = _CAMWEBSRV_HTTPD_SERVER_PORT_1;
   c.ctrl_port = _CAMWEBSRV_HTTPD_CONTROL_PORT_1;
-  c.global_user_ctx = (void *) phttpd->cam;
+  c.global_user_ctx = (void *) phttpd;
   c.global_user_ctx_free_fn = _camwebsrv_httpd_noop;
-  
+
   rv = httpd_start(&(phttpd->handles[0]), &c);
 
   if (rv != ESP_OK)
@@ -261,7 +277,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
 
   c.server_port = _CAMWEBSRV_HTTPD_SERVER_PORT_2;
   c.ctrl_port = _CAMWEBSRV_HTTPD_CONTROL_PORT_2;
-  c.global_user_ctx = (void *) phttpd->cam;
+  c.global_user_ctx = (void *) phttpd;
   c.global_user_ctx_free_fn = _camwebsrv_httpd_noop;
 
   rv = httpd_start(&(phttpd->handles[1]), &c);
@@ -287,6 +303,29 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   return ESP_OK;
 }
 
+esp_err_t camwebsrv_httpd_process(camwebsrv_httpd_t httpd)
+{
+  _camwebsrv_httpd_t *phttpd;
+  esp_err_t rv;
+
+  if (httpd == NULL)
+  {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  phttpd = (_camwebsrv_httpd_t *) httpd;
+
+  rv = camwebsrv_sclients_process(phttpd->sclients, phttpd->cam, phttpd->handles[1]);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_process(): camwebsrv_sclients_process() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return rv;
+  }
+
+  return ESP_OK;
+}
+
 static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req)
 {
   esp_err_t rv;
@@ -307,12 +346,12 @@ static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req)
   }
   else
   {
-    camwebsrv_camera_t cam;
+    _camwebsrv_httpd_t *phttpd;
 
-    cam = (camwebsrv_camera_t) httpd_get_global_user_ctx(req->handle);
+    phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
     httpd_resp_set_type(req, "text/html");
-    rv = camwebsrv_storage_get(camwebsrv_camera_is_ov3660(cam) ? "ov3660.htm" : "ov2640.htm", _camwebsrv_httpd_static_cb, (void *) req);
+    rv = camwebsrv_storage_get(camwebsrv_camera_is_ov3660(phttpd->cam) ? "ov3660.htm" : "ov2640.htm", _camwebsrv_httpd_static_cb, (void *) req);
   }
 
   if (rv != ESP_OK)
@@ -329,9 +368,9 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
 {
   esp_err_t rv = ESP_OK;
   char buf[_CAMWEBSRV_HTTPD_RESP_STATUS_LEN];
-  camwebsrv_camera_t cam;
+  _camwebsrv_httpd_t *phttpd;
 
-  cam = (camwebsrv_camera_t) httpd_get_global_user_ctx(req->handle);
+  phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
   // response type/header status
 
@@ -347,32 +386,32 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     buf,
     _CAMWEBSRV_HTTPD_RESP_STATUS_LEN - 1,
     _CAMWEBSRV_HTTPD_RESP_STATUS_STR,
-    camwebsrv_camera_get(cam, "aec"),
-    camwebsrv_camera_get(cam, "aec2"),
-    camwebsrv_camera_get(cam, "aec_value"),
-    camwebsrv_camera_get(cam, "ae_level"),
-    camwebsrv_camera_get(cam, "agc"),
-    camwebsrv_camera_get(cam, "agc_gain"),
-    camwebsrv_camera_get(cam, "awb"),
-    camwebsrv_camera_get(cam, "awb_gain"),
-    camwebsrv_camera_get(cam, "bpc"),
-    camwebsrv_camera_get(cam, "brightness"),
-    camwebsrv_camera_get(cam, "colorbar"),
-    camwebsrv_camera_get(cam, "contrast"),
-    camwebsrv_camera_get(cam, "dcw"),
-    camwebsrv_camera_get(cam, "flash"),
-    camwebsrv_camera_get(cam, "framesize"),
-    camwebsrv_camera_get(cam, "gainceiling"),
-    camwebsrv_camera_get(cam, "hmirror"),
-    camwebsrv_camera_get(cam, "lenc"),
-    camwebsrv_camera_get(cam, "quality"),
-    camwebsrv_camera_get(cam, "raw_gma"),
-    camwebsrv_camera_get(cam, "saturation"),
-    camwebsrv_camera_get(cam, "sharpness"),
-    camwebsrv_camera_get(cam, "special_effect"),
-    camwebsrv_camera_get(cam, "vflip"),
-    camwebsrv_camera_get(cam, "wb_mode"),
-    camwebsrv_camera_get(cam, "wpc")
+    camwebsrv_camera_get(phttpd->cam, "aec"),
+    camwebsrv_camera_get(phttpd->cam, "aec2"),
+    camwebsrv_camera_get(phttpd->cam, "aec_value"),
+    camwebsrv_camera_get(phttpd->cam, "ae_level"),
+    camwebsrv_camera_get(phttpd->cam, "agc"),
+    camwebsrv_camera_get(phttpd->cam, "agc_gain"),
+    camwebsrv_camera_get(phttpd->cam, "awb"),
+    camwebsrv_camera_get(phttpd->cam, "awb_gain"),
+    camwebsrv_camera_get(phttpd->cam, "bpc"),
+    camwebsrv_camera_get(phttpd->cam, "brightness"),
+    camwebsrv_camera_get(phttpd->cam, "colorbar"),
+    camwebsrv_camera_get(phttpd->cam, "contrast"),
+    camwebsrv_camera_get(phttpd->cam, "dcw"),
+    camwebsrv_camera_get(phttpd->cam, "flash"),
+    camwebsrv_camera_get(phttpd->cam, "framesize"),
+    camwebsrv_camera_get(phttpd->cam, "gainceiling"),
+    camwebsrv_camera_get(phttpd->cam, "hmirror"),
+    camwebsrv_camera_get(phttpd->cam, "lenc"),
+    camwebsrv_camera_get(phttpd->cam, "quality"),
+    camwebsrv_camera_get(phttpd->cam, "raw_gma"),
+    camwebsrv_camera_get(phttpd->cam, "saturation"),
+    camwebsrv_camera_get(phttpd->cam, "sharpness"),
+    camwebsrv_camera_get(phttpd->cam, "special_effect"),
+    camwebsrv_camera_get(phttpd->cam, "vflip"),
+    camwebsrv_camera_get(phttpd->cam, "wb_mode"),
+    camwebsrv_camera_get(phttpd->cam, "wpc")
   );
 
   // send response
@@ -393,12 +432,12 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
 {
   esp_err_t rv;
   size_t len;
-  char *buf; 
+  char *buf;
   char bvar[_CAMWEBSRV_HTTPD_PARAM_LEN];
   char bval[_CAMWEBSRV_HTTPD_PARAM_LEN];
-  camwebsrv_camera_t cam;
+  _camwebsrv_httpd_t *phttpd;
 
-  cam = (camwebsrv_camera_t) httpd_get_global_user_ctx(req->handle);
+  phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
   // response type/header status
 
@@ -407,7 +446,7 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
   httpd_resp_set_status(req, "200 OK");
 
   // how long is the query string?
-  
+
   len = httpd_req_get_url_query_len(req) + 1;
 
   if (len == 0)
@@ -475,7 +514,7 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
 
   // set camera variable
 
-  rv = camwebsrv_camera_set(cam, bvar, atoi(bval));
+  rv = camwebsrv_camera_set(phttpd->cam, bvar, atoi(bval));
 
   if (rv != ESP_OK)
   {
@@ -510,11 +549,11 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
 static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
 {
   esp_err_t rv;
-  camwebsrv_camera_t cam;
   uint8_t *fbuf = NULL;
   size_t flen = 0;
+  _camwebsrv_httpd_t *phttpd;
 
-  cam = (camwebsrv_camera_t) httpd_get_global_user_ctx(req->handle);
+  phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
   // response type/header status
 
@@ -523,7 +562,7 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
   httpd_resp_set_type(req, "image/jpeg");
   httpd_resp_set_status(req, "200 OK");
 
-  rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen);
+  rv = camwebsrv_camera_frame_grab(phttpd->cam, &fbuf, &flen);
 
   if (rv != ESP_OK)
   {
@@ -534,7 +573,7 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
 
   rv = httpd_resp_send(req, (const char *) fbuf, (ssize_t) flen);
 
-  camwebsrv_camera_frame_dispose(cam);
+  camwebsrv_camera_frame_dispose(phttpd->cam);
 
   if (rv != ESP_OK)
   {
@@ -549,120 +588,32 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
 static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req)
 {
   esp_err_t rv;
-  camwebsrv_camera_t cam;
-  TickType_t last = 0;
+  _camwebsrv_httpd_t *phttpd;
+  _camwebsrv_httpd_worker_arg_t *parg;
 
-  cam = (camwebsrv_camera_t) httpd_get_global_user_ctx(req->handle);
+  phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
-  // response type/header status
+  parg = (_camwebsrv_httpd_worker_arg_t *) malloc(sizeof(_camwebsrv_httpd_worker_arg_t));
 
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=" _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY);
-  httpd_resp_set_status(req, "200 OK");
-
-  while(1)
+  if (parg == NULL)
   {
-    uint8_t *fbuf = NULL;
-    size_t flen = 0;
-    char hdr[_CAMWEBSRV_HTTPD_MULTIPART_HEADER_LEN];
+    int e = errno;
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): malloc() failed: [%d]: %s", e, strerror(e));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    return ESP_FAIL;
+  }
 
-    // get frame
+  parg->phttpd = phttpd;
+  parg->sockfd = httpd_req_to_sockfd(req);
 
-    rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen);
+  rv = httpd_queue_work(req->handle, _camwebsrv_httpd_worker, parg);
 
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): camwebsrv_camera_frame_grab() failed: [%d]: %s", rv, esp_err_to_name(rv));
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    // multipart headers
-  
-    memset(hdr, 0x00, sizeof(hdr));
-  
-    snprintf(hdr, sizeof(hdr) - 1, "\r\n");
-  
-    rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
-  
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(1) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    snprintf(hdr, sizeof(hdr) - 1, "--%s\r\n", _CAMWEBSRV_HTTPD_MULTIPART_HEADER_BOUNDARY);
-
-    rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(2) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    snprintf(hdr, sizeof(hdr) - 1, "Content-Type: image/jpeg\r\n");
-
-    rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(3) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    snprintf(hdr, sizeof(hdr) - 1, "Content-Length: %u\r\n", flen);
-
-    rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(4) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    snprintf(hdr, sizeof(hdr) - 1, "\r\n");
-
-    rv = httpd_resp_send_chunk(req, hdr, strlen(hdr));
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(5) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    // body
-
-    rv = httpd_resp_send_chunk(req, (const char *) fbuf, (ssize_t) flen);
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_resp_send_chunk(6) failed: [%d]: %s", rv, esp_err_to_name(rv));
-      camwebsrv_camera_frame_dispose(cam);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
-      return rv;
-    }
-
-    camwebsrv_camera_frame_dispose(cam);
-
-    // sleep, if needed, to meet the configured FPS
-
-    if (last == 0)
-    {
-      last = xTaskGetTickCount();
-    }
-
-    xTaskDelayUntil(&last, pdMS_TO_TICKS(1000 / CAMWEBSRV_CAMERA_STREAM_FPS));
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(): httpd_queue_work() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    free(parg);
+    return ESP_FAIL;
   }
 
   return ESP_OK;
@@ -682,6 +633,24 @@ static bool _camwebsrv_httpd_static_cb(const char *buf, size_t len, void *arg)
   }
 
   return true;
+}
+
+static void _camwebsrv_httpd_worker(void *arg)
+{
+  _camwebsrv_httpd_worker_arg_t *parg;
+  esp_err_t rv;
+
+  parg = (_camwebsrv_httpd_worker_arg_t *) arg;
+
+  rv = camwebsrv_sclients_add(parg->phttpd->sclients, parg->sockfd);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_worker(): camwebsrv_sclients_add() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    httpd_sess_trigger_close(parg->phttpd->handles[1], parg->sockfd);
+  }
+
+  free(parg);
 }
 
 static void _camwebsrv_httpd_noop(void *arg)
