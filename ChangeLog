@@ -1,3 +1,13 @@
+2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/CMakeLists.txt:
+	* main/config.h:
+	* main/sclients.c:
+	* main/sclients.h:
+
+	  - Added stream client list module.
+
+
 2023-02-11  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/vbytes.c:
