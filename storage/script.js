@@ -10,7 +10,6 @@
 function onContentLoaded(event)
 {
   var baseHost = document.location.origin;
-  var streamUrl = baseHost + ':81';
 
   const hide = el =>
   {
@@ -155,7 +154,7 @@ function onContentLoaded(event)
 
   const startStream = () =>
   {
-    view.src = `${streamUrl}/stream`;
+    view.src = `${baseHost}/stream`;
     show(viewContainer);
     streamButton.innerHTML = 'Stop Stream';
   };

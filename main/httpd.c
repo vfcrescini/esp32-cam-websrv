@@ -21,10 +21,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#define _CAMWEBSRV_HTTPD_SERVER_PORT_1  80
-#define _CAMWEBSRV_HTTPD_SERVER_PORT_2  81
-#define _CAMWEBSRV_HTTPD_CONTROL_PORT_1 32768
-#define _CAMWEBSRV_HTTPD_CONTROL_PORT_2 32769
+#define _CAMWEBSRV_HTTPD_SERVER_PORT 80
+#define _CAMWEBSRV_HTTPD_CONTROL_PORT 32768
 
 #define _CAMWEBSRV_HTTPD_PATH_ROOT    "/"
 #define _CAMWEBSRV_HTTPD_PATH_STYLE   "/style.css"
@@ -70,7 +68,7 @@
 
 typedef struct
 {
-  httpd_handle_t handles[2];
+  httpd_handle_t handle;
   camwebsrv_camera_t cam;
   camwebsrv_sclients_t sclients;
 } _camwebsrv_httpd_t;
@@ -109,7 +107,7 @@ esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd)
     return ESP_FAIL;
   }
 
-  memset(&(phttpd->handles), 0x00, sizeof(httpd_handle_t) * 2);
+  memset(phttpd, 0x00, sizeof(_camwebsrv_httpd_t));
 
   rv = camwebsrv_camera_init(&(phttpd->cam));
 
@@ -139,7 +137,6 @@ esp_err_t camwebsrv_httpd_destroy(camwebsrv_httpd_t *httpd)
 {
   _camwebsrv_httpd_t *phttpd;
   esp_err_t rv;
-  uint8_t i;
 
   if (httpd == NULL)
   {
@@ -148,7 +145,7 @@ esp_err_t camwebsrv_httpd_destroy(camwebsrv_httpd_t *httpd)
 
   phttpd = (_camwebsrv_httpd_t *) *httpd;
 
-  rv = camwebsrv_sclients_destroy(&(phttpd->sclients), phttpd->handles[1]);
+  rv = camwebsrv_sclients_destroy(&(phttpd->sclients), phttpd->handle);
 
   if (rv != ESP_OK)
   {
@@ -162,16 +159,13 @@ esp_err_t camwebsrv_httpd_destroy(camwebsrv_httpd_t *httpd)
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): camwebsrv_camera_destroy() failed: [%d]: %s", rv, esp_err_to_name(rv));
   }
 
-  for(i = 0; i < 2; i++)
+  if (phttpd->handle != NULL)
   {
-    if (phttpd->handles[i] != NULL)
-    {
-      rv = httpd_stop(phttpd->handles[i]);
+    rv = httpd_stop(phttpd->handle);
 
-      if (rv != ESP_OK)
-      {
-        ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): httpd_stop(%d) failed: [%d]: %s", i, rv, esp_err_to_name(rv));
-      }
+    if (rv != ESP_OK)
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_destroy(): httpd_stop() failed: [%d]: %s", rv, esp_err_to_name(rv));
     }
   }
 
@@ -196,14 +190,14 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
 
   phttpd = (_camwebsrv_httpd_t *) httpd;
 
-  // instance 1
+  // configuration overrides
 
-  c.server_port = _CAMWEBSRV_HTTPD_SERVER_PORT_1;
-  c.ctrl_port = _CAMWEBSRV_HTTPD_CONTROL_PORT_1;
+  c.server_port = _CAMWEBSRV_HTTPD_SERVER_PORT;
+  c.ctrl_port = _CAMWEBSRV_HTTPD_CONTROL_PORT;
   c.global_user_ctx = (void *) phttpd;
   c.global_user_ctx_free_fn = _camwebsrv_httpd_noop;
 
-  rv = httpd_start(&(phttpd->handles[0]), &c);
+  rv = httpd_start(&(phttpd->handle), &c);
 
   if (rv != ESP_OK)
   {
@@ -219,7 +213,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_static;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register style
 
@@ -229,7 +223,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_static;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register script
 
@@ -239,7 +233,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_static;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register status
 
@@ -249,7 +243,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_status;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register control
 
@@ -259,7 +253,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_control;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register capture
 
@@ -269,24 +263,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_capture;
 
-  httpd_register_uri_handler(phttpd->handles[0], &uri);
-
-  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_start(): started server 1 on port %d", _CAMWEBSRV_HTTPD_SERVER_PORT_1);
-
-  // instance 2
-
-  c.server_port = _CAMWEBSRV_HTTPD_SERVER_PORT_2;
-  c.ctrl_port = _CAMWEBSRV_HTTPD_CONTROL_PORT_2;
-  c.global_user_ctx = (void *) phttpd;
-  c.global_user_ctx_free_fn = _camwebsrv_httpd_noop;
-
-  rv = httpd_start(&(phttpd->handles[1]), &c);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_start(): httpd_start() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return rv;
-  }
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
   // register stream
 
@@ -296,9 +273,9 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   uri.method  = HTTP_GET;
   uri.handler = _camwebsrv_httpd_handler_stream;
 
-  httpd_register_uri_handler(phttpd->handles[1], &uri);
+  httpd_register_uri_handler(phttpd->handle, &uri);
 
-  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_start(): started server 2 on port %d", _CAMWEBSRV_HTTPD_SERVER_PORT_2);
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD camwebsrv_httpd_start(): started server on port %d", _CAMWEBSRV_HTTPD_SERVER_PORT);
 
   return ESP_OK;
 }
@@ -315,7 +292,7 @@ esp_err_t camwebsrv_httpd_process(camwebsrv_httpd_t httpd)
 
   phttpd = (_camwebsrv_httpd_t *) httpd;
 
-  rv = camwebsrv_sclients_process(phttpd->sclients, phttpd->cam, phttpd->handles[1]);
+  rv = camwebsrv_sclients_process(phttpd->sclients, phttpd->cam, phttpd->handle);
 
   if (rv != ESP_OK)
   {
@@ -647,7 +624,7 @@ static void _camwebsrv_httpd_worker(void *arg)
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_worker(): camwebsrv_sclients_add() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    httpd_sess_trigger_close(parg->phttpd->handles[1], parg->sockfd);
+    httpd_sess_trigger_close(parg->phttpd->handle, parg->sockfd);
   }
 
   free(parg);
