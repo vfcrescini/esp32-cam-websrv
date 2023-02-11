@@ -96,6 +96,6 @@ void app_main()
       return;
     }
 
-    xTaskDelayUntil(&last, pdMS_TO_TICKS(1000 / CAMWEBSRV_CAMERA_STREAM_FPS));
+    xTaskDelayUntil(&last, pdMS_TO_TICKS(CAMWEBSRV_MAIN_MSECS_PER_TICK));
   }
 }

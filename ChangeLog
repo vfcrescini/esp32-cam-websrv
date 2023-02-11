@@ -1,5 +1,17 @@
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+	* main/main.c:
+
+	  - Separated camera FPS, CAMWEBSRV_CAMERA_STREAM_FPS, which is now
+	    set to 2, and main loop ms per tick rate,
+	    CAMWEBSRV_MAIN_MSECS_PER_TICK, which is now set to 125. Need to
+	    keep request processing frequent enough, but FPS has to remain low
+	    until we can figure out how to speed things up.
+
+
+2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
 	* main/main.c:
 	* main/httpd.c:
 	* main/httpd.h:
