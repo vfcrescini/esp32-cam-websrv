@@ -338,6 +338,8 @@ static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req)
     return rv;
   }
 
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_static(%d): served %s", httpd_req_to_sockfd(req), req->uri);
+
   return ESP_OK;
 }
 
@@ -401,6 +403,8 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
     return rv;
   }
+
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(%d): served %s", httpd_req_to_sockfd(req), req->uri);
 
   return ESP_OK;
 }
@@ -520,6 +524,8 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
     return rv;
   }
 
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_control(%d): served %s", httpd_req_to_sockfd(req), req->uri);
+
   return ESP_OK;
 }
 
@@ -559,6 +565,8 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
     return rv;
   }
 
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_capture(%d): served %s", httpd_req_to_sockfd(req), req->uri);
+
   return ESP_OK;
 }
 
@@ -583,6 +591,8 @@ static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req)
   parg->phttpd = phttpd;
   parg->sockfd = httpd_req_to_sockfd(req);
 
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(%d): serving %s", httpd_req_to_sockfd(req), req->uri);
+
   rv = httpd_queue_work(req->handle, _camwebsrv_httpd_worker, parg);
 
   if (rv != ESP_OK)
@@ -592,6 +602,8 @@ static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req)
     free(parg);
     return ESP_FAIL;
   }
+
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_stream(%d): served %s", httpd_req_to_sockfd(req), req->uri);
 
   return ESP_OK;
 }

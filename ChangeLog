@@ -1,6 +1,13 @@
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/httpd.c:
+
+	  - Log all requests.
+
+
+2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/httpd.c:
 	* storage/script.js:
 
 	  - Stream requests, as well as all other request types, are now all
