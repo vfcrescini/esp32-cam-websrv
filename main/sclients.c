@@ -30,6 +30,7 @@ typedef struct _camwebsrv_sclients_node_t
   int sockfd;
   camwebsrv_vbytes_t sockbuf;
   struct _camwebsrv_sclients_node_t *next;
+  TickType_t idle;
 } _camwebsrv_sclients_node_t;
 
 typedef struct
@@ -144,7 +145,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (xSemaphoreTake(pclients->mutex, portMAX_DELAY) != pdTRUE)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): xSemaphoreTake() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): xSemaphoreTake() failed", sockfd);
     return ESP_FAIL;
   }
 
@@ -152,7 +153,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (_camwebsrv_sclients_sock_exists(pclients->list, sockfd))
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): sockfd %d is already in the client list", sockfd);
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): failed: already in the client list", sockfd);
     xSemaphoreGive(pclients->mutex);
     return ESP_FAIL;
   }
@@ -164,19 +165,20 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
   if (pnode == NULL)
   {
     int e = errno;
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): malloc() failed: [%d]: %s", e, strerror(e));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): malloc() failed: [%d]: %s", sockfd, e, strerror(e));
     xSemaphoreGive(pclients->mutex);
     return ESP_FAIL;
   }
 
   pnode->sockfd = sockfd;
   pnode->next = pclients->list;
+  pnode->idle = xTaskGetTickCount();
 
   rv = camwebsrv_vbytes_init(&(pnode->sockbuf));
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_init() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
     return rv;
@@ -189,7 +191,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_append(1) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(1) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -200,7 +202,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_append(2) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(2) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -211,7 +213,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_append(3) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(3) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -222,7 +224,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_append(4) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(4) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -233,7 +235,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): camwebsrv_vbytes_append(5) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(5) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -250,7 +252,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   // done
 
-  ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(): Added client sock fd %d", sockfd);
+  ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): Added client", sockfd);
 
   return ESP_OK;
 }
@@ -267,7 +269,6 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
   {
     return ESP_ERR_INVALID_ARG;
   }
-
 
   pclients = (_camwebsrv_sclients_t *) clients;
 
@@ -287,9 +288,15 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
   while(curr != NULL)
   {
     bool flushed = false;
-    int sockfd;
+    int sockfd = curr->sockfd;
 
-    sockfd = curr->sockfd;
+    // first, check the idle timer
+
+    if ((xTaskGetTickCount() - curr->idle) > pdMS_TO_TICKS(CAMWEBSRV_SCLIENTS_IDLE_TMOUT))
+    {
+      ESP_LOGW(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): exceeded idle time limit", sockfd);
+      goto rm_client;
+    }
 
     // attempt to flush out the socket buffer
 
@@ -297,8 +304,8 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
     if (rv != ESP_OK)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): _camwebsrv_sclients_node_flush() failed: [%d]: %s", rv, esp_err_to_name(rv));
-      goto error;
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): _camwebsrv_sclients_node_flush() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+      goto rm_client;
     }
 
     // if the socket buffer is empty, get, send and dispose new frame
@@ -312,8 +319,8 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
       if (rv != ESP_OK)
       {
-        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): camwebsrv_camera_frame_grab() failed: [%d]: %s", rv, esp_err_to_name(rv));
-	goto error;
+        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): camwebsrv_camera_frame_grab() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+        goto rm_client;
       }
 
       rv = _camwebsrv_sclients_node_frame(curr, fbuf, flen);
@@ -322,8 +329,8 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
       if (rv != ESP_OK)
       {
-        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): _camwebsrv_sclients_node_frame() failed: [%d]: %s", rv, esp_err_to_name(rv));
-	goto error;
+        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): _camwebsrv_sclients_node_frame() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+        goto rm_client;
       }
     }
 
@@ -334,7 +341,7 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
     // on error, close socket, then delete node
 
-    error:
+    rm_client:
 
       httpd_sess_trigger_close(handle, sockfd);
       camwebsrv_vbytes_destroy(&(curr->sockbuf));
@@ -344,17 +351,17 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       if (prev == NULL)
       {
         pclients->list = curr->next;
-	curr = pclients->list;
+        curr = pclients->list;
       }
       else
       {
-	prev->next = curr->next;
+        prev->next = curr->next;
         curr = prev->next;
       }
 
       free(temp);
 
-      ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): Removed client sock fd %d", sockfd);
+      ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): Removed client", sockfd);
   }
 
   // release mutex
@@ -394,10 +401,19 @@ ssize_t _camwebsrv_sclients_sock_send_bytes(int sockfd, uint8_t *bytes, size_t l
   size_t bytes_left = len;
   size_t bytes_sent = 0;
   size_t bytes_blck;
+  TickType_t started = xTaskGetTickCount();
 
   while(bytes_left > 0)
   {
     ssize_t rv;
+
+    // have we exceeded the time limit?
+
+    if ((xTaskGetTickCount() - started) > pdMS_TO_TICKS(CAMWEBSRV_SCLIENTS_SEND_TMOUT))
+    {
+      ESP_LOGW(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_send_bytes(%d): exceeded send time limit", sockfd);
+      break;
+    }
 
     // how much to send this time?
 
@@ -416,7 +432,7 @@ ssize_t _camwebsrv_sclients_sock_send_bytes(int sockfd, uint8_t *bytes, size_t l
       if (e == EAGAIN || e == EWOULDBLOCK)
       {
         ESP_LOGD(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_send_bytes(%d): send() would block", sockfd);
-	break;
+        break;
       }
 
       ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_send_bytes(%d): send() failed: [%d]: %s", sockfd, e, strerror(e));
@@ -427,7 +443,7 @@ ssize_t _camwebsrv_sclients_sock_send_bytes(int sockfd, uint8_t *bytes, size_t l
 
     if (rv == 0)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_send_bytes(): send() failed");
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_send_bytes(%d): send() failed", sockfd);
       return -2;
     }
 
@@ -457,9 +473,15 @@ esp_err_t _camwebsrv_sclients_node_send_bytes(_camwebsrv_sclients_node_t *pnode,
 
     if (sent < 0)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_bytes(): _camwebsrv_sclients_sock_send_bytes() failed");
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_bytes(%d): _camwebsrv_sclients_sock_send_bytes() failed", pnode->sockfd);
       return ESP_FAIL;
     }
+
+    // update idle timer
+
+    pnode->idle = xTaskGetTickCount();
+
+    // increment stuff
 
     bytes = bytes + sent;
     len = len - sent;
@@ -471,7 +493,7 @@ esp_err_t _camwebsrv_sclients_node_send_bytes(_camwebsrv_sclients_node_t *pnode,
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_bytes(): camwebsrv_vbytes_append_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_bytes(%d): camwebsrv_vbytes_append_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -488,7 +510,7 @@ esp_err_t _camwebsrv_sclients_node_send_vbytes(_camwebsrv_sclients_node_t *pnode
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_vbytes(): camwebsrv_vbytes_get_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_vbytes(%d): camwebsrv_vbytes_get_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -496,7 +518,7 @@ esp_err_t _camwebsrv_sclients_node_send_vbytes(_camwebsrv_sclients_node_t *pnode
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_vbytes(): _camwebsrv_sclients_node_send_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_vbytes(%d): _camwebsrv_sclients_node_send_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -513,7 +535,7 @@ esp_err_t _camwebsrv_sclients_node_send_str(_camwebsrv_sclients_node_t *pnode, c
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(): camwebsrv_vbytes_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(%d): camwebsrv_vbytes_init() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -523,7 +545,7 @@ esp_err_t _camwebsrv_sclients_node_send_str(_camwebsrv_sclients_node_t *pnode, c
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(): camwebsrv_vbytes_set_vlist() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(%d): camwebsrv_vbytes_set_vlist() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -531,7 +553,7 @@ esp_err_t _camwebsrv_sclients_node_send_str(_camwebsrv_sclients_node_t *pnode, c
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(): _camwebsrv_sclients_node_send_vbytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_send_str(%d): _camwebsrv_sclients_node_send_vbytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -553,7 +575,7 @@ esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(): camwebsrv_vbytes_get_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(%d): camwebsrv_vbytes_get_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -567,9 +589,13 @@ esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool
 
     if (sent < 0)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(): _camwebsrv_sclients_sock_send_bytes() failed");
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(%d): _camwebsrv_sclients_sock_send_bytes() failed", pnode->sockfd);
       return ESP_FAIL;
     }
+
+    // update idle timer
+
+    pnode->idle = xTaskGetTickCount();
 
     // reset buffer to whatever remains unsent
 
@@ -577,7 +603,7 @@ esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool
 
     if (rv != ESP_OK)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(): camwebsrv_vbytes_set_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_flush(%d): camwebsrv_vbytes_set_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
       return ESP_FAIL;
     }
   }
@@ -602,7 +628,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(1) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(1) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -612,7 +638,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(2) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(2) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -622,7 +648,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(3) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(3) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -632,7 +658,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(4) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(4) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -642,7 +668,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(5) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(5) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -652,7 +678,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_bytes(6) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_bytes(6) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
@@ -662,7 +688,7 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(): _camwebsrv_sclients_node_send_str(7) failed: [%d]: %s", rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(7) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 

@@ -1,5 +1,13 @@
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+	* main/sclients.c:
+
+	  - Added client send timeout, CAMWEBSRV_SCLIENTS_SEND_TMOUT (1 sec)
+	    and client idle timeout, CAMWEBSRV_SCLIENTS_IDLE_TMOUT (3 secs).
+
+	  - sclients module now includes socket FD in log text.
+
 	* main/httpd.c:
 
 	  - Log all requests.
