@@ -1,3 +1,11 @@
+2023-02-14  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/sclients.c:
+
+	  - Switched to using esp_timer_get_time() instead of
+	    xTaskGetTickCount() to avoid overflow.
+
+
 2023-02-12  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/config.h:

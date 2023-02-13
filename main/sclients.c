@@ -7,6 +7,7 @@
 #include "vbytes.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -19,6 +20,7 @@
 
 #include <esp_log.h>
 #include <esp_err.h>
+#include <esp_timer.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -30,7 +32,7 @@ typedef struct _camwebsrv_sclients_node_t
   int sockfd;
   camwebsrv_vbytes_t sockbuf;
   struct _camwebsrv_sclients_node_t *next;
-  TickType_t idle;
+  int64_t idle;
 } _camwebsrv_sclients_node_t;
 
 typedef struct
@@ -172,7 +174,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   pnode->sockfd = sockfd;
   pnode->next = pclients->list;
-  pnode->idle = xTaskGetTickCount();
+  pnode->idle = esp_timer_get_time();
 
   rv = camwebsrv_vbytes_init(&(pnode->sockbuf));
 
@@ -292,7 +294,7 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
     // first, check the idle timer
 
-    if ((xTaskGetTickCount() - curr->idle) > pdMS_TO_TICKS(CAMWEBSRV_SCLIENTS_IDLE_TMOUT))
+    if ((esp_timer_get_time() - curr->idle) > (CAMWEBSRV_SCLIENTS_IDLE_TMOUT * 1000))
     {
       ESP_LOGW(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): exceeded idle time limit", sockfd);
       goto rm_client;
@@ -479,7 +481,7 @@ esp_err_t _camwebsrv_sclients_node_send_bytes(_camwebsrv_sclients_node_t *pnode,
 
     // update idle timer
 
-    pnode->idle = xTaskGetTickCount();
+    pnode->idle = esp_timer_get_time();
 
     // increment stuff
 
@@ -595,7 +597,7 @@ esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool
 
     // update idle timer
 
-    pnode->idle = xTaskGetTickCount();
+    pnode->idle = esp_timer_get_time();
 
     // reset buffer to whatever remains unsent
 
