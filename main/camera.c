@@ -132,9 +132,30 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
   }
 
   pcam->fb = NULL;
-  pcam->flash = false;
+  pcam->flash = CAMWEBSRV_CAMERA_DEFAULT_FLASH;
   pcam->ov3660 = ov3660;
   pcam->tstamp = 0;
+
+  // set default framesize
+
+  if (sensor->pixformat == PIXFORMAT_JPEG)
+  {
+    if (sensor->set_framesize(sensor, (framesize_t) CAMWEBSRV_CAMERA_DEFAULT_FS))
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
+      free(pcam);
+      return ESP_FAIL;
+    }
+  }
+
+  // set default flash
+
+  if (gpio_set_level(CAMWEBSRV_PIN_FLASH, pcam->flash) != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): failed to set flash %s", pcam->flash ? "on" : "off");
+    free(pcam);
+    return ESP_FAIL;
+  }
 
   *cam = (camwebsrv_camera_t) pcam;
 

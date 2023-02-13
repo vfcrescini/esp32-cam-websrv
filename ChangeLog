@@ -1,5 +1,9 @@
 2023-02-14  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/camera.c:
+
+	  - Set default resolution and flash state on init.
+
 	* main/config.h:
 
 	  - Set CAMWEBSRV_CAMERA_STREAM_FPS to 4.
