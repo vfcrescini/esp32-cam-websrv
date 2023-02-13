@@ -2,6 +2,8 @@
 
 	* main/sclients.c:
 
+	  - Added extra check to enforce FPS rate.
+
 	  - Switched to using esp_timer_get_time() instead of
 	    xTaskGetTickCount() to avoid overflow.
 

@@ -291,10 +291,11 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
   {
     bool flushed = false;
     int sockfd = curr->sockfd;
+    int64_t ctime = esp_timer_get_time();
 
     // first, check the idle timer
 
-    if ((esp_timer_get_time() - curr->idle) > (CAMWEBSRV_SCLIENTS_IDLE_TMOUT * 1000))
+    if ((ctime - curr->idle) > (CAMWEBSRV_SCLIENTS_IDLE_TMOUT * 1000))
     {
       ESP_LOGW(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): exceeded idle time limit", sockfd);
       goto rm_client;
@@ -310,9 +311,10 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       goto rm_client;
     }
 
-    // if the socket buffer is empty, get, send and dispose new frame
+    // if the socket buffer is empty, and if sufficient time has lapsed since
+    // we've sent the last frame, get, send and dispose new frame
 
-    if (flushed)
+    if (flushed && (ctime - curr->idle) > (1000000 / CAMWEBSRV_CAMERA_STREAM_FPS))
     {
       uint8_t *fbuf = NULL;
       size_t flen = 0;
@@ -422,6 +424,8 @@ ssize_t _camwebsrv_sclients_sock_send_bytes(int sockfd, uint8_t *bytes, size_t l
     bytes_blck = bytes_left < CAMWEBSRV_SCLIENTS_BSIZE ? bytes_left : CAMWEBSRV_SCLIENTS_BSIZE;
 
     // send a block at a time
+    // XXX we really should use httpd_socket_send() here, but we can't until
+    // IDFGH-9275 is fixed
 
     rv = send(sockfd, (const void *) bytes, bytes_blck, MSG_DONTWAIT | MSG_NOSIGNAL);
 
