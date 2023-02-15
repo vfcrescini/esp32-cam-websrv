@@ -1,3 +1,13 @@
+2023-02-15  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/sclients.c:
+
+	  - Removed unused len field in _camwebsrv_sclients_t struct.
+
+	  - Added binary semaphore to prevent unnecessary loop spin when there
+	    are no stream clilents.
+
+
 2023-02-14  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/camera.c:

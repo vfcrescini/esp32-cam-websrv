@@ -38,8 +38,8 @@ typedef struct _camwebsrv_sclients_node_t
 typedef struct
 {
   _camwebsrv_sclients_node_t *list;
-  unsigned int len;
   SemaphoreHandle_t mutex;
+  SemaphoreHandle_t sflag;
 } _camwebsrv_sclients_t;
 
 size_t _camwebsrv_sclients_count_digits(size_t n);
@@ -78,8 +78,17 @@ esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
     return ESP_FAIL;
   }
 
+  pclients->sflag = xSemaphoreCreateBinary();
+
+  if (pclients->sflag == NULL)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_init(): xSemaphoreCreateBinary() failed");
+    vSemaphoreDelete(pclients->mutex);
+    free(pclients);
+    return ESP_FAIL;
+  }
+
   pclients->list = NULL;
-  pclients->len = 0;
 
   *clients = pclients;
 
@@ -122,6 +131,15 @@ esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle
 
   *clients = NULL;
 
+  // these _should_ release tasks that are blocked on these semaphores prior to
+  // them being destroyed
+
+  if (uxSemaphoreGetCount(pclients->sflag) == 0)
+  {
+    xSemaphoreGive(pclients->sflag);
+  }
+
+  vSemaphoreDelete(pclients->sflag);
   xSemaphoreGive(pclients->mutex);
   vSemaphoreDelete(pclients->mutex);
 
@@ -248,6 +266,13 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   pclients->list = pnode;
 
+  // ensure semaphore flag is up
+
+  if (uxSemaphoreGetCount(pclients->sflag) == 0)
+  {
+    xSemaphoreGive(pclients->sflag);
+  }
+
   // release mutex
 
   xSemaphoreGive(pclients->mutex);
@@ -274,11 +299,19 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
 
   pclients = (_camwebsrv_sclients_t *) clients;
 
+  // block until there is actually something to do
+
+  if (xSemaphoreTake(pclients->sflag, portMAX_DELAY) != pdTRUE)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): xSemaphoreTake(semaphore) failed");
+    return ESP_FAIL;
+  }
+
   // get mutex
 
   if (xSemaphoreTake(pclients->mutex, portMAX_DELAY) != pdTRUE)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): xSemaphoreTake() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): xSemaphoreTake(mutex) failed");
     return ESP_FAIL;
   }
 
@@ -366,6 +399,13 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       free(temp);
 
       ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): Removed client", sockfd);
+  }
+
+  // ensure semaphore flag is up if there is at least one client left
+
+  if (uxSemaphoreGetCount(pclients->sflag) == 0 && pclients->list != NULL)
+  {
+    xSemaphoreGive(pclients->sflag);
   }
 
   // release mutex
