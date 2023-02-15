@@ -545,7 +545,7 @@ static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req)
   httpd_resp_set_type(req, "image/jpeg");
   httpd_resp_set_status(req, "200 OK");
 
-  rv = camwebsrv_camera_frame_grab(phttpd->cam, &fbuf, &flen);
+  rv = camwebsrv_camera_frame_grab(phttpd->cam, &fbuf, &flen, NULL);
 
   if (rv != ESP_OK)
   {

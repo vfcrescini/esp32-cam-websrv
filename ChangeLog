@@ -1,5 +1,14 @@
 2023-02-15  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/camera.c:
+	* main/sclients.c:
+
+	  - Added optional timestamp parameter to camwebsrv_camera_frame_grab().
+
+	  - Replaced FPS frame throttler in camwebsrv_sclients_process() with
+	    a frame timestamp check to prevent sending the same frame more
+	    than once.
+
 	* main/sclients.c:
 
 	  - Removed unused len field in _camwebsrv_sclients_t struct.

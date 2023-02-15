@@ -33,6 +33,7 @@ typedef struct _camwebsrv_sclients_node_t
   camwebsrv_vbytes_t sockbuf;
   struct _camwebsrv_sclients_node_t *next;
   int64_t idle;
+  int64_t tstamp;
 } _camwebsrv_sclients_node_t;
 
 typedef struct
@@ -344,15 +345,15 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       goto rm_client;
     }
 
-    // if the socket buffer is empty, and if sufficient time has lapsed since
-    // we've sent the last frame, get, send and dispose new frame
+    // if the socket buffer is empty, get, send and dispose new frame
 
-    if (flushed && (ctime - curr->idle) > (1000000 / CAMWEBSRV_CAMERA_STREAM_FPS))
+    if (flushed)
     {
       uint8_t *fbuf = NULL;
       size_t flen = 0;
+      int64_t tstamp = 0;
 
-      rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen);
+      rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen, &tstamp);
 
       if (rv != ESP_OK)
       {
@@ -360,15 +361,26 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
         goto rm_client;
       }
 
-      rv = _camwebsrv_sclients_node_frame(curr, fbuf, flen);
+      // compare the timestamp of the new frame against the frame that we've
+      // sent previously. no need to send the same frame more than once.
+
+      if (tstamp > curr->tstamp)
+      {
+        rv = _camwebsrv_sclients_node_frame(curr, fbuf, flen);
+      }
 
       camwebsrv_camera_frame_dispose(cam);
 
-      if (rv != ESP_OK)
+      if (tstamp > curr->tstamp)
       {
-        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): _camwebsrv_sclients_node_frame() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-        goto rm_client;
+        if (rv != ESP_OK)
+        {
+          ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): _camwebsrv_sclients_node_frame() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+          goto rm_client;
+        }
       }
+
+      curr->tstamp = tstamp;
     }
 
     prev = curr;

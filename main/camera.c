@@ -196,7 +196,7 @@ esp_err_t camwebsrv_camera_destroy(camwebsrv_camera_t *cam)
   return ESP_OK;
 }
 
-esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, size_t *flen)
+esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, size_t *flen, int64_t *tstamp)
 {
   _camwebsrv_camera_t *pcam;
   int64_t now;
@@ -274,6 +274,11 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
 
   *fbuf = pcam->fb->buf;
   *flen = pcam->fb->len;
+
+  if (tstamp != NULL)
+  {
+    *tstamp = pcam->tstamp;
+  }
 
   return ESP_OK;
 }
