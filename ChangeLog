@@ -1,5 +1,15 @@
 2023-02-15  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* storage/script.js:
+
+	  - Requests to http://<server>/stream and http://<server>/capture are
+	    now made with an extra unused random number parameter. This is
+	    workaround for a problem in some browsers that prevents a second
+	    tab or window from streaming from the same camera.
+
+
+2023-02-15  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
 	* main/camera.c:
 	* main/sclients.c:
 

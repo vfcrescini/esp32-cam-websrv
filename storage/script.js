@@ -7,6 +7,11 @@
 //   Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 //   Licensed under the Apache License, Version 2.0
 
+function genId()
+{
+  return Date.now().toString(16).padStart(12, "0") + parseInt(Math.random() * 100000000, 10).toString(16).padStart(8, "0");
+}
+
 function onContentLoaded(event)
 {
   var baseHost = document.location.origin;
@@ -148,13 +153,14 @@ function onContentLoaded(event)
 
   const stopStream = () =>
   {
+    view.setAttribute("src", "");
     window.stop();
     streamButton.innerHTML = 'Start Stream';
   };
 
   const startStream = () =>
   {
-    view.src = `${baseHost}/stream`;
+    view.setAttribute("src", baseHost + "/stream?id=" + genId());
     show(viewContainer);
     streamButton.innerHTML = 'Stop Stream';
   };
@@ -163,7 +169,7 @@ function onContentLoaded(event)
   stillButton.onclick = () =>
   {
     stopStream();
-    view.src = `${baseHost}/capture?_cb=${Date.now()}`;
+    view.setAttribute("src", baseHost + "/capture?id=" + genId());
     show(viewContainer);
   };
 
