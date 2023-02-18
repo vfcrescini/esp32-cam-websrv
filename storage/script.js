@@ -150,12 +150,13 @@ function onContentLoaded(event)
   const stillButton = document.getElementById('get-still');
   const streamButton = document.getElementById('toggle-stream');
   const closeButton = document.getElementById('close-stream');
+  var is_streaming = false;
 
   const stopStream = () =>
   {
-    view.setAttribute("src", "");
     window.stop();
     streamButton.innerHTML = 'Start Stream';
+    is_streaming = false;
   };
 
   const startStream = () =>
@@ -163,14 +164,20 @@ function onContentLoaded(event)
     view.setAttribute("src", baseHost + "/stream?id=" + genId());
     show(viewContainer);
     streamButton.innerHTML = 'Stop Stream';
+    is_streaming = true;
   };
 
-  // Attach actions to buttons
   stillButton.onclick = () =>
   {
-    stopStream();
-    view.setAttribute("src", baseHost + "/capture?id=" + genId());
-    show(viewContainer);
+    if (is_streaming)
+    {
+      stopStream();
+    }
+    else
+    {
+      view.setAttribute("src", baseHost + "/capture?id=" + genId());
+      show(viewContainer);
+    }
   };
 
   closeButton.onclick = () =>
@@ -181,11 +188,11 @@ function onContentLoaded(event)
 
   streamButton.onclick = () =>
   {
-    const streamEnabled = streamButton.innerHTML === 'Stop Stream'
-    if (streamEnabled)
+    if (is_streaming)
     {
       stopStream()
-    } else
+    }
+    else
     {
       startStream()
     }
