@@ -1,3 +1,10 @@
+2023-02-19  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* sdkconfig.defaults:
+
+	  - Added HTTPD_QUEUE_WORK_BLOCKING=y
+
+
 2023-02-15  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* storage/script.js:
