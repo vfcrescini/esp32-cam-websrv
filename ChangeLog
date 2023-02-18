@@ -1,5 +1,9 @@
 2023-02-19  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/sclients.c:
+
+	  - camwebsrv_sclients_add() now logs client IP and port.
+
 	* sdkconfig.defaults:
 
 	  - Added HTTPD_QUEUE_WORK_BLOCKING=y

@@ -17,6 +17,8 @@
 #include <unistd.h>
 
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <esp_log.h>
 #include <esp_err.h>
@@ -26,6 +28,20 @@
 #include <freertos/semphr.h>
 
 #define _CAMWEBSRV_SCLIENTS_MULTIPART_HEADER_BOUNDARY "U8dOTFrG6WId0hT/TDkN2gx+0TvJCcSMFl7b/3B/B1j86B1GYo3LnEh491bJJ7/BwkRWQXX"
+
+#if CONFIG_LWIP_IPV6
+  #define _CAMWEBSRV_SCLIIENTS_SOCKADDR_IN_T   struct sockaddr_in6
+  #define _CAMWEBSRV_SCLIENTS_AF               AF_INET6
+  #define _CAMWEBSRV_SCLIENTS_ADDRSTRLEN       INET6_ADDRSTRLEN
+  #define _CAMWEBSRV_SCLIENTS_ADDR(X)          ((X).sin6_addr)
+  #define _CAMWEBSRV_SCLIENTS_PORT(X)          ((X).sin6_port)
+#else
+  #define _CAMWEBSRV_SCLIIENTS_SOCKADDR_IN_T  struct sockaddr_in
+  #define _CAMWEBSRV_SCLIENTS_AF              AF_INET
+  #define _CAMWEBSRV_SCLIENTS_ADDRSTRLEN      INET_ADDRSTRLEN
+  #define _CAMWEBSRV_SCLIENTS_ADDR(X)         ((X).sin_addr)
+  #define _CAMWEBSRV_SCLIENTS_PORT(X)         ((X).sin_port)
+#endif
 
 typedef struct _camwebsrv_sclients_node_t
 {
@@ -51,6 +67,7 @@ esp_err_t _camwebsrv_sclients_node_send_vbytes(_camwebsrv_sclients_node_t *pnode
 esp_err_t _camwebsrv_sclients_node_send_str(_camwebsrv_sclients_node_t *pnode, const char *fmt, ...);
 esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool *flushed);
 esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint8_t *fbuf, size_t flen);
+esp_err_t _camwebsrv_sclients_sock_get_peer(int sockfd, char *caddr);
 
 esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
 {
@@ -153,6 +170,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 {
   _camwebsrv_sclients_t *pclients;
   _camwebsrv_sclients_node_t *pnode;
+  char caddr[_CAMWEBSRV_SCLIENTS_ADDRSTRLEN + 6];
   esp_err_t rv;
 
   if (clients == NULL)
@@ -161,6 +179,14 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
   }
 
   pclients = (_camwebsrv_sclients_t *) clients;
+
+  rv = _camwebsrv_sclients_sock_get_peer(sockfd, caddr);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): _camwebsrv_sclients_sock_get_peer failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+    return rv;
+  }
 
   // get mutex
 
@@ -280,7 +306,7 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   // done
 
-  ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): Added client", sockfd);
+  ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): Added client %s", sockfd, caddr);
 
   return ESP_OK;
 }
@@ -749,6 +775,33 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
     ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(7) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
+
+  return ESP_OK;
+}
+
+esp_err_t _camwebsrv_sclients_sock_get_peer(int sockfd, char *caddr)
+{
+  _CAMWEBSRV_SCLIIENTS_SOCKADDR_IN_T addr;
+  socklen_t len = sizeof(addr);
+  char tip[_CAMWEBSRV_SCLIENTS_ADDRSTRLEN];
+
+  memset(&addr, 0x00, sizeof(addr));
+
+  if (getpeername(sockfd, (struct sockaddr *) &addr, &len) != 0)
+  {
+    int e = errno;
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_sock_get_peer(): getpeername() failed: [%d]: %s", e, strerror(e));
+    return ESP_FAIL;
+  }
+
+  if (inet_ntop(_CAMWEBSRV_SCLIENTS_AF, &_CAMWEBSRV_SCLIENTS_ADDR(addr), tip, _CAMWEBSRV_SCLIENTS_ADDRSTRLEN) == NULL)
+  {
+    int e = errno;
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_sock_get_peer(): inet_ntop() failed: [%d]: %s", e, strerror(e));
+    return ESP_FAIL;
+  }
+
+  sprintf(caddr, "%s:%d", tip, ntohs(_CAMWEBSRV_SCLIENTS_PORT(addr)));
 
   return ESP_OK;
 }
