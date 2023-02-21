@@ -30,7 +30,8 @@ typedef struct
   bool flash;
   bool ov3660;
   int64_t tstamp;
-  SemaphoreHandle_t mutex;
+  SemaphoreHandle_t mutex1;
+  SemaphoreHandle_t mutex2;
 } _camwebsrv_camera_t;
 
 esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
@@ -122,11 +123,21 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
     return ESP_FAIL;
   }
 
-  pcam->mutex = xSemaphoreCreateMutex();
+  pcam->mutex1 = xSemaphoreCreateMutex();
 
-  if (pcam->mutex == NULL)
+  if (pcam->mutex1 == NULL)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): xSemaphoreCreateMutex() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): xSemaphoreCreateMutex(1) failed");
+    free(pcam);
+    return ESP_FAIL;
+  }
+
+  pcam->mutex2 = xSemaphoreCreateMutex();
+
+  if (pcam->mutex2 == NULL)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): xSemaphoreCreateMutex(2) failed");
+    vSemaphoreDelete(pcam->mutex1);
     free(pcam);
     return ESP_FAIL;
   }
@@ -178,18 +189,27 @@ esp_err_t camwebsrv_camera_destroy(camwebsrv_camera_t *cam)
     return ESP_OK;
   }
 
-  if (xSemaphoreTake(pcam->mutex, portMAX_DELAY) != pdTRUE)
+  if (xSemaphoreTake(pcam->mutex1, portMAX_DELAY) != pdTRUE)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_destroy(): xSemaphoreTake() failed");
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_destroy(): xSemaphoreTake(1) failed");
     return ESP_FAIL;
   }
 
-  // we have the mutex, so clear the caller's reference to this object before giving it back
+  if (xSemaphoreTake(pcam->mutex2, portMAX_DELAY) != pdTRUE)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_destroy(): xSemaphoreTake(2) failed");
+    return ESP_FAIL;
+  }
+
+  // we have the mutexes, so clear the caller's reference to this object before giving it back
 
   *cam = NULL;
 
-  xSemaphoreGive(pcam->mutex);
-  vSemaphoreDelete(pcam->mutex);
+  xSemaphoreGive(pcam->mutex1);
+  vSemaphoreDelete(pcam->mutex1);
+
+  xSemaphoreGive(pcam->mutex2);
+  vSemaphoreDelete(pcam->mutex2);
 
   free(pcam);
 
@@ -210,7 +230,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
 
   // lock
 
-  if (xSemaphoreTake(pcam->mutex, portMAX_DELAY) != pdTRUE)
+  if (xSemaphoreTake(pcam->mutex2, portMAX_DELAY) != pdTRUE)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_frame_grab(): xSemaphoreTake() failed");
     return ESP_FAIL;
@@ -241,7 +261,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
     if (sensor == NULL)
     {
       ESP_LOGE(CAMWEBSRV_TAG, "CAM (): camwebsrv_camera_frame_grab(): camwebsrv_camera_frame_grab() failed");
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex2);
       return ESP_FAIL;
     }
 
@@ -252,7 +272,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
     if (pcam->fb == NULL)
     {
       ESP_LOGE(CAMWEBSRV_TAG, "CAM (): camwebsrv_camera_frame_grab(): esp_camera_fb_get() failed");
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex2);
       return ESP_FAIL;
     }
 
@@ -263,7 +283,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
     {
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_frame(): failed; unsupported camera pixel format");
       esp_camera_fb_return(pcam->fb);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex2);
       return ESP_FAIL;
     }
 
@@ -296,7 +316,7 @@ esp_err_t camwebsrv_camera_frame_dispose(camwebsrv_camera_t cam)
 
   // do we hold the lock?
 
-  if (xSemaphoreGetMutexHolder(pcam->mutex) != xTaskGetCurrentTaskHandle())
+  if (xSemaphoreGetMutexHolder(pcam->mutex2) != xTaskGetCurrentTaskHandle())
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_frame_dispose(): frame not held");
     return ESP_FAIL;
@@ -304,7 +324,7 @@ esp_err_t camwebsrv_camera_frame_dispose(camwebsrv_camera_t cam)
 
   // unlock
 
-  xSemaphoreGive(pcam->mutex);
+  xSemaphoreGive(pcam->mutex2);
 
   return ESP_OK;
 }
@@ -323,7 +343,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
 
   // lock
 
-  if (xSemaphoreTake(pcam->mutex, portMAX_DELAY) != pdTRUE)
+  if (xSemaphoreTake(pcam->mutex1, portMAX_DELAY) != pdTRUE)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(): xSemaphoreTake() failed");
     return ESP_FAIL;
@@ -336,7 +356,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
   if (sensor == NULL)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): esp_camera_sensor_get() failed", name, value);
-    xSemaphoreGive(pcam->mutex);
+    xSemaphoreGive(pcam->mutex1);
     return ESP_FAIL;
   }
 
@@ -347,7 +367,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_exposure_ctrl(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_exposure_ctrl() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -356,7 +376,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_aec2(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_aec2() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -365,7 +385,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_aec_value(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.aec_value() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -374,7 +394,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_ae_level(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.ae_level() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -383,7 +403,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_gain_ctrl(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_gain_ctrl() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -392,7 +412,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_agc_gain(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.agc_gain() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -401,7 +421,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_whitebal(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_whitebal() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -410,7 +430,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_awb_gain(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.awb_gain() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -419,7 +439,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_bpc(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_bpc() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -428,7 +448,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_brightness(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_brightness() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -437,7 +457,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_colorbar(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_colorbal() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -446,7 +466,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_contrast(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_contrast() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -455,7 +475,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_dcw(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_dcw() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -466,7 +486,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (gpio_set_level(CAMWEBSRV_PIN_FLASH, pcam->flash) != ESP_OK)
     {
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): gpio_set_level() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     }
   }
@@ -477,7 +497,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
       if (sensor->set_framesize(sensor, (framesize_t) value))
       {
         ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_framesize() failed", name, value);
-        xSemaphoreGive(pcam->mutex);
+        xSemaphoreGive(pcam->mutex1);
         return ESP_FAIL;
       }
     }
@@ -487,7 +507,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_gainceiling(sensor, (gainceiling_t) value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_gainceiling() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -496,7 +516,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_hmirror(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_hmirror() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -505,7 +525,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_lenc(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_lenc() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -514,7 +534,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_quality(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_quality() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -523,7 +543,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_raw_gma(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_raw_gma() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -532,7 +552,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_saturation(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_saturation() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -541,7 +561,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_sharpness(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_sharpness() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -550,7 +570,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_special_effect(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_special_effect() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -559,7 +579,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_vflip(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_vflip() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -568,7 +588,7 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_wb_mode(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_wb_mode() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
@@ -577,20 +597,20 @@ esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int val
     if (sensor->set_wpc(sensor, value))
     { 
       ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d): sensor.set_wpc() failed", name, value);
-      xSemaphoreGive(pcam->mutex);
+      xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     } 
   }
   else
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\"): failed; invalid parameter", name);
-    xSemaphoreGive(pcam->mutex);
+    xSemaphoreGive(pcam->mutex1);
     return ESP_ERR_INVALID_ARG;
   }
 
   ESP_LOGI(CAMWEBSRV_TAG, "CAM camwebsrv_camera_set(\"%s\", %d)", name, value);
 
-  xSemaphoreGive(pcam->mutex);
+  xSemaphoreGive(pcam->mutex1);
 
   return ESP_OK;
 }
@@ -610,7 +630,7 @@ int camwebsrv_camera_get(camwebsrv_camera_t cam, const char *name)
 
   // lock
 
-  if (xSemaphoreTake(pcam->mutex, portMAX_DELAY) != pdTRUE)
+  if (xSemaphoreTake(pcam->mutex1, portMAX_DELAY) != pdTRUE)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_get(): xSemaphoreTake() failed");
     return -1;
@@ -623,7 +643,7 @@ int camwebsrv_camera_get(camwebsrv_camera_t cam, const char *name)
   if (sensor == NULL)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_get(\"%s\"): esp_camera_sensor_get() failed", name);
-    xSemaphoreGive(pcam->mutex);
+    xSemaphoreGive(pcam->mutex1);
     return -1;
   }
 
@@ -739,7 +759,7 @@ int camwebsrv_camera_get(camwebsrv_camera_t cam, const char *name)
     rv = -1;
   }
 
-  xSemaphoreGive(pcam->mutex);
+  xSemaphoreGive(pcam->mutex1);
 
   return rv;
 }
