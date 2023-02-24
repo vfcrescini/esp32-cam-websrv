@@ -1,3 +1,14 @@
+2023-02-25  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/camera.c:
+	* main/camera.h:
+	* main/httpd.c:
+
+	  - Renamed camwebsrv_camera_set() and camwebsrv_camera_get() to
+	    camwebsrv_camera_ctrl_set() and camwebsrv_camera_ctrl_get(),
+	    respectively.
+
+
 2023-02-21  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/camera.c:

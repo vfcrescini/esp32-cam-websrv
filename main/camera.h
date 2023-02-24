@@ -17,8 +17,8 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam);
 esp_err_t camwebsrv_camera_destroy(camwebsrv_camera_t *cam);
 esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, size_t *flen, int64_t *tstamp);
 esp_err_t camwebsrv_camera_frame_dispose(camwebsrv_camera_t cam);
-esp_err_t camwebsrv_camera_set(camwebsrv_camera_t cam, const char *name, int value);
-int camwebsrv_camera_get(camwebsrv_camera_t cam, const char *name);
+esp_err_t camwebsrv_camera_ctrl_set(camwebsrv_camera_t cam, const char *name, int value);
+int camwebsrv_camera_ctrl_get(camwebsrv_camera_t cam, const char *name);
 bool camwebsrv_camera_is_ov3660(camwebsrv_camera_t cam);
 
 #endif

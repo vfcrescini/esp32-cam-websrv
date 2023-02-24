@@ -365,32 +365,32 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     buf,
     _CAMWEBSRV_HTTPD_RESP_STATUS_LEN - 1,
     _CAMWEBSRV_HTTPD_RESP_STATUS_STR,
-    camwebsrv_camera_get(phttpd->cam, "aec"),
-    camwebsrv_camera_get(phttpd->cam, "aec2"),
-    camwebsrv_camera_get(phttpd->cam, "aec_value"),
-    camwebsrv_camera_get(phttpd->cam, "ae_level"),
-    camwebsrv_camera_get(phttpd->cam, "agc"),
-    camwebsrv_camera_get(phttpd->cam, "agc_gain"),
-    camwebsrv_camera_get(phttpd->cam, "awb"),
-    camwebsrv_camera_get(phttpd->cam, "awb_gain"),
-    camwebsrv_camera_get(phttpd->cam, "bpc"),
-    camwebsrv_camera_get(phttpd->cam, "brightness"),
-    camwebsrv_camera_get(phttpd->cam, "colorbar"),
-    camwebsrv_camera_get(phttpd->cam, "contrast"),
-    camwebsrv_camera_get(phttpd->cam, "dcw"),
-    camwebsrv_camera_get(phttpd->cam, "flash"),
-    camwebsrv_camera_get(phttpd->cam, "framesize"),
-    camwebsrv_camera_get(phttpd->cam, "gainceiling"),
-    camwebsrv_camera_get(phttpd->cam, "hmirror"),
-    camwebsrv_camera_get(phttpd->cam, "lenc"),
-    camwebsrv_camera_get(phttpd->cam, "quality"),
-    camwebsrv_camera_get(phttpd->cam, "raw_gma"),
-    camwebsrv_camera_get(phttpd->cam, "saturation"),
-    camwebsrv_camera_get(phttpd->cam, "sharpness"),
-    camwebsrv_camera_get(phttpd->cam, "special_effect"),
-    camwebsrv_camera_get(phttpd->cam, "vflip"),
-    camwebsrv_camera_get(phttpd->cam, "wb_mode"),
-    camwebsrv_camera_get(phttpd->cam, "wpc")
+    camwebsrv_camera_ctrl_get(phttpd->cam, "aec"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "aec2"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "aec_value"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "ae_level"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "agc"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "agc_gain"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "awb"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "awb_gain"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "bpc"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "brightness"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "colorbar"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "contrast"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "dcw"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "flash"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "framesize"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "gainceiling"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "hmirror"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "lenc"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "quality"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "raw_gma"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "saturation"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "sharpness"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "special_effect"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "vflip"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "wb_mode"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "wpc")
   );
 
   // send response
@@ -495,11 +495,11 @@ static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req)
 
   // set camera variable
 
-  rv = camwebsrv_camera_set(phttpd->cam, bvar, atoi(bval));
+  rv = camwebsrv_camera_ctrl_set(phttpd->cam, bvar, atoi(bval));
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_control(): camwebsrv_camera_set(\"%s\", %s) failed", bvar, bval);
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_control(): camwebsrv_camera_ctrl_set(\"%s\", %s) failed", bvar, bval);
 
     if (rv == ESP_ERR_INVALID_ARG)
     {
