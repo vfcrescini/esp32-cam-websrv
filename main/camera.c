@@ -34,85 +34,19 @@ typedef struct
   SemaphoreHandle_t mutex2;
 } _camwebsrv_camera_t;
 
+static esp_err_t _camwebsrv_camera_init(_camwebsrv_camera_t *pcam);
+
 esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
 {
   esp_err_t rv;
-  sensor_t *sensor;
-  camera_config_t config;
   _camwebsrv_camera_t *pcam;
-  bool ov3660 = false;
 
   if (cam == NULL)
   {
     return ESP_ERR_INVALID_ARG;
   }
 
-  memset(&config, 0x00, sizeof(config));
-
-  config.pin_pwdn = CAMWEBSRV_PIN_PWDN;
-  config.pin_reset = CAMWEBSRV_PIN_RESET;
-  config.pin_xclk = CAMWEBSRV_PIN_XCLK;
-  config.pin_sccb_sda = CAMWEBSRV_PIN_SIOD;
-  config.pin_sccb_scl = CAMWEBSRV_PIN_SIOC;
-
-  config.pin_d7 = CAMWEBSRV_PIN_D7;
-  config.pin_d6 = CAMWEBSRV_PIN_D6;
-  config.pin_d5 = CAMWEBSRV_PIN_D5;
-  config.pin_d4 = CAMWEBSRV_PIN_D4;
-  config.pin_d3 = CAMWEBSRV_PIN_D3;
-  config.pin_d2 = CAMWEBSRV_PIN_D2;
-  config.pin_d1 = CAMWEBSRV_PIN_D1;
-  config.pin_d0 = CAMWEBSRV_PIN_D0;
-  config.pin_vsync = CAMWEBSRV_PIN_VSYNC;
-  config.pin_href = CAMWEBSRV_PIN_HREF;
-  config.pin_pclk = CAMWEBSRV_PIN_PCLK;
-
-  config.xclk_freq_hz = 20000000;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.ledc_channel = LEDC_CHANNEL_0;
-
-  config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = FRAMESIZE_UXGA;
-
-  config.jpeg_quality = 10;
-  config.fb_count = 1;
-  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-
-  rv = esp_camera_init(&config);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): esp_camera_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return rv;
-  }
-
-  // this returns a static pointer from the esp32-camera library, so there is
-  // no point in holding on to a reference to that
-
-  sensor = esp_camera_sensor_get();
-
-  if (sensor == NULL)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): esp_camera_sensor_get() failed");
-    return ESP_FAIL;
-  }
-
-  if (sensor->id.PID == OV3660_PID)
-  {
-    sensor->set_vflip(sensor, 1);
-    sensor->set_brightness(sensor, 1);
-    sensor->set_saturation(sensor, -2);
-
-    ov3660 = true;
-  }
-
-  rv = gpio_set_direction(CAMWEBSRV_PIN_FLASH, GPIO_MODE_OUTPUT);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): gpio_set_direction() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return rv;
-  }
+  // create object
 
   pcam = (_camwebsrv_camera_t *) malloc(sizeof(_camwebsrv_camera_t));
 
@@ -144,28 +78,33 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
 
   pcam->fb = NULL;
   pcam->flash = CAMWEBSRV_CAMERA_DEFAULT_FLASH;
-  pcam->ov3660 = ov3660;
+  pcam->ov3660 = false;
   pcam->tstamp = 0;
 
-  // set default framesize
+  // set flash led gpio
 
-  if (sensor->pixformat == PIXFORMAT_JPEG)
+  rv = gpio_set_direction(CAMWEBSRV_PIN_FLASH, GPIO_MODE_OUTPUT);
+
+  if (rv != ESP_OK)
   {
-    if (sensor->set_framesize(sensor, (framesize_t) CAMWEBSRV_CAMERA_DEFAULT_FS))
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
-      free(pcam);
-      return ESP_FAIL;
-    }
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): gpio_set_direction() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    vSemaphoreDelete(pcam->mutex2);
+    vSemaphoreDelete(pcam->mutex1);
+    free(pcam);
+    return rv;
   }
 
-  // set default flash
+  // initialise
 
-  if (gpio_set_level(CAMWEBSRV_PIN_FLASH, pcam->flash) != ESP_OK)
+  rv = _camwebsrv_camera_init(pcam);
+
+  if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): failed to set flash %s", pcam->flash ? "on" : "off");
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_init(): _camwebsrv_camera_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    vSemaphoreDelete(pcam->mutex2);
+    vSemaphoreDelete(pcam->mutex1);
     free(pcam);
-    return ESP_FAIL;
+    return rv;
   }
 
   *cam = (camwebsrv_camera_t) pcam;
@@ -212,6 +151,65 @@ esp_err_t camwebsrv_camera_destroy(camwebsrv_camera_t *cam)
   vSemaphoreDelete(pcam->mutex2);
 
   free(pcam);
+
+  return ESP_OK;
+}
+
+esp_err_t camwebsrv_camera_reset(camwebsrv_camera_t cam)
+{
+  _camwebsrv_camera_t *pcam;
+  esp_err_t rv;
+
+  if (cam == NULL)
+  {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  pcam = (_camwebsrv_camera_t *) cam;
+
+  // get both locks
+
+  if (xSemaphoreTake(pcam->mutex1, portMAX_DELAY) != pdTRUE)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_reset(): xSemaphoreTake(1) failed");
+    return ESP_FAIL;
+  }
+
+  if (xSemaphoreTake(pcam->mutex2, portMAX_DELAY) != pdTRUE)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_reset(): xSemaphoreTake(2) failed");
+    xSemaphoreGive(pcam->mutex1);
+    return ESP_FAIL;
+  }
+
+  // de-init
+
+  rv = esp_camera_deinit();
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_reset(): esp_camera_deinit() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    xSemaphoreGive(pcam->mutex2);
+    xSemaphoreGive(pcam->mutex1);
+    return ESP_FAIL;
+  }
+
+  // re-init
+
+  rv = _camwebsrv_camera_init(pcam);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_reset(): _camwebsrv_camera_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    xSemaphoreGive(pcam->mutex2);
+    xSemaphoreGive(pcam->mutex1);
+    return ESP_FAIL;
+  }
+
+  // unnlock
+
+  xSemaphoreGive(pcam->mutex2);
+  xSemaphoreGive(pcam->mutex1);
 
   return ESP_OK;
 }
@@ -776,4 +774,91 @@ bool camwebsrv_camera_is_ov3660(camwebsrv_camera_t cam)
   pcam = (_camwebsrv_camera_t *) cam;
 
   return pcam->ov3660;
+}
+
+static esp_err_t _camwebsrv_camera_init(_camwebsrv_camera_t *pcam)
+{
+  esp_err_t rv;
+  camera_config_t config;
+  sensor_t *sensor;
+
+  memset(&config, 0x00, sizeof(config));
+
+  config.pin_pwdn = CAMWEBSRV_PIN_PWDN;
+  config.pin_reset = CAMWEBSRV_PIN_RESET;
+  config.pin_xclk = CAMWEBSRV_PIN_XCLK;
+  config.pin_sccb_sda = CAMWEBSRV_PIN_SIOD;
+  config.pin_sccb_scl = CAMWEBSRV_PIN_SIOC;
+
+  config.pin_d7 = CAMWEBSRV_PIN_D7;
+  config.pin_d6 = CAMWEBSRV_PIN_D6;
+  config.pin_d5 = CAMWEBSRV_PIN_D5;
+  config.pin_d4 = CAMWEBSRV_PIN_D4;
+  config.pin_d3 = CAMWEBSRV_PIN_D3;
+  config.pin_d2 = CAMWEBSRV_PIN_D2;
+  config.pin_d1 = CAMWEBSRV_PIN_D1;
+  config.pin_d0 = CAMWEBSRV_PIN_D0;
+  config.pin_vsync = CAMWEBSRV_PIN_VSYNC;
+  config.pin_href = CAMWEBSRV_PIN_HREF;
+  config.pin_pclk = CAMWEBSRV_PIN_PCLK;
+
+  config.xclk_freq_hz = 20000000;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.ledc_channel = LEDC_CHANNEL_0;
+
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = FRAMESIZE_UXGA;
+
+  config.jpeg_quality = 10;
+  config.fb_count = 1;
+  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+
+  rv = esp_camera_init(&config);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): _esp_camera_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return rv;
+  }
+
+  // this returns a static pointer from the esp32-camera library, so there is
+  // no point in holding on to a reference to that
+
+  sensor = esp_camera_sensor_get();
+
+  if (sensor == NULL)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): esp_camera_sensor_get() failed");
+    return ESP_FAIL;
+  }
+
+  pcam->ov3660 = (sensor->id.PID == OV3660_PID);
+
+  if (pcam->ov3660)
+  {
+    sensor->set_vflip(sensor, 1);
+    sensor->set_brightness(sensor, 1);
+    sensor->set_saturation(sensor, -2);
+  }
+
+  // set framesize
+
+  if (sensor->pixformat == PIXFORMAT_JPEG)
+  {
+    if (sensor->set_framesize(sensor, (framesize_t) CAMWEBSRV_CAMERA_DEFAULT_FS))
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
+      return ESP_FAIL;
+    }
+  }
+
+  // set flash
+
+  if (gpio_set_level(CAMWEBSRV_PIN_FLASH, pcam->flash) != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): failed to set flash %s", pcam->flash ? "on" : "off");
+    return ESP_FAIL;
+  }
+
+  return ESP_OK;
 }

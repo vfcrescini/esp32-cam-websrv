@@ -28,6 +28,7 @@
 #define _CAMWEBSRV_HTTPD_PATH_STYLE   "/style.css"
 #define _CAMWEBSRV_HTTPD_PATH_SCRIPT  "/script.js"
 #define _CAMWEBSRV_HTTPD_PATH_STATUS  "/status"
+#define _CAMWEBSRV_HTTPD_PATH_RESET   "/reset"
 #define _CAMWEBSRV_HTTPD_PATH_CONTROL "/control"
 #define _CAMWEBSRV_HTTPD_PATH_CAPTURE "/capture"
 #define _CAMWEBSRV_HTTPD_PATH_STREAM  "/stream"
@@ -81,6 +82,7 @@ typedef struct
 
 static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req);
+static esp_err_t _camwebsrv_httpd_handler_reset(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_control(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_capture(httpd_req_t *req);
 static esp_err_t _camwebsrv_httpd_handler_stream(httpd_req_t *req);
@@ -245,6 +247,16 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
 
   httpd_register_uri_handler(phttpd->handle, &uri);
 
+  // register reset
+
+  memset(&uri, 0x00, sizeof(uri));
+
+  uri.uri     = _CAMWEBSRV_HTTPD_PATH_RESET;
+  uri.method  = HTTP_GET;
+  uri.handler = _camwebsrv_httpd_handler_reset;
+
+  httpd_register_uri_handler(phttpd->handle, &uri);
+
   // register control
 
   memset(&uri, 0x00, sizeof(uri));
@@ -405,6 +417,46 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
   }
 
   ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(%d): served %s", httpd_req_to_sockfd(req), req->uri);
+
+  return ESP_OK;
+}
+
+static esp_err_t _camwebsrv_httpd_handler_reset(httpd_req_t *req)
+{
+  esp_err_t rv = ESP_OK;
+  _camwebsrv_httpd_t *phttpd;
+
+  phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
+
+  // response type/header status
+
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_status(req, "200 OK");
+
+  // reset
+
+  rv = camwebsrv_camera_reset(phttpd->cam);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_reset(): camwebsrv_camera_reset() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    return rv;
+  }
+
+  // send response
+
+  rv = httpd_resp_send(req, NULL, 0);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_reset(): httpd_resp_send() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    return rv;
+  }
+
+  ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_reset(%d): served %s", httpd_req_to_sockfd(req), req->uri);
 
   return ESP_OK;
 }

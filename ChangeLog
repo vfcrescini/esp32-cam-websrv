@@ -2,6 +2,22 @@
 
 	* main/camera.c:
 	* main/camera.h:
+
+	  - Added new camwebsrv_camera_reset() function to deinitialise and
+	    then reinitialise the camera.
+
+	* main/httpd.c:
+
+	  - Added http://<host>/reset handler to reset camera.
+
+	* storage/ov2640.htm:
+	* storage/ov3660.htm:
+	* storage/script.js:
+
+	  - Added new reset button to reset camera.
+
+	* main/camera.c:
+	* main/camera.h:
 	* main/httpd.c:
 
 	  - Renamed camwebsrv_camera_set() and camwebsrv_camera_get() to

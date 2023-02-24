@@ -147,6 +147,7 @@ function onContentLoaded(event)
 
   const view = document.getElementById('stream');
   const viewContainer = document.getElementById('stream-container');
+  const resetButton = document.getElementById('reset');
   const stillButton = document.getElementById('get-still');
   const streamButton = document.getElementById('toggle-stream');
   const closeButton = document.getElementById('close-stream');
@@ -165,6 +166,11 @@ function onContentLoaded(event)
     show(viewContainer);
     streamButton.innerHTML = 'Stop Stream';
     is_streaming = true;
+  };
+
+  resetButton.onclick = () =>
+  {
+    fetch(`${baseHost}/reset`);
   };
 
   stillButton.onclick = () =>

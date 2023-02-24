@@ -15,6 +15,7 @@ typedef void *camwebsrv_camera_t;
 
 esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam);
 esp_err_t camwebsrv_camera_destroy(camwebsrv_camera_t *cam);
+esp_err_t camwebsrv_camera_reset(camwebsrv_camera_t cam);
 esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, size_t *flen, int64_t *tstamp);
 esp_err_t camwebsrv_camera_frame_dispose(camwebsrv_camera_t cam);
 esp_err_t camwebsrv_camera_ctrl_set(camwebsrv_camera_t cam, const char *name, int value);
