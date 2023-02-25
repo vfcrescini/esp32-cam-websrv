@@ -7,94 +7,51 @@
 //   Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 //   Licensed under the Apache License, Version 2.0
 
-function genId()
-{
-  return Date.now().toString(16).padStart(12, "0") + parseInt(Math.random() * 100000000, 10).toString(16).padStart(8, "0");
-}
-
 function onContentLoaded(event)
 {
-  var baseHost = document.location.origin;
+  const view = document.getElementById('stream');
+  const viewContainer = document.getElementById('stream-container');
+  const resetButton = document.getElementById('reset');
+  const stillButton = document.getElementById('get-still');
+  const streamButton = document.getElementById('toggle-stream');
+  const closeButton = document.getElementById('close-stream');
+  const agc = document.getElementById('agc');
+  const agcGain = document.getElementById('agc_gain-group');
+  const gainCeiling = document.getElementById('gainceiling-group');
+  const aec = document.getElementById('aec');
+  const exposure = document.getElementById('aec_value-group');
+  const awb = document.getElementById('awb_gain');
+  const wb = document.getElementById('wb_mode-group');
+  const framesize = document.getElementById('framesize');
 
-  const hide = el =>
-  {
-    el.classList.add('hidden');
-  };
-  const show = el =>
-  {
-    el.classList.remove('hidden');
-  };
+  let url_base = document.location.origin;
 
-  const disable = el =>
-  {
-    el.classList.add('disabled');
-    el.disabled = true;
-  };
+  let is_streaming = false;
 
-  const enable = el =>
+  function id_generate()
   {
-    el.classList.remove('disabled');
-    el.disabled = false;
-  };
-
-  const updateValue = (el, value, updateRemote) =>
-  {
-    updateRemote = updateRemote == null ? true : updateRemote;
-    let initialValue;
-    if (el.type === 'checkbox')
-    {
-      initialValue = el.checked;
-      value = !!value;
-      el.checked = value;
-    } else
-    {
-      initialValue = el.value;
-      el.value = value;
-    }
-
-    if (updateRemote && initialValue !== value)
-    {
-      updateConfig(el);
-    } else if(!updateRemote)
-    {
-      if(el.id === "aec")
-      {
-        value ? hide(exposure) : show(exposure);
-      }
-      else if(el.id === "agc")
-      {
-        if (value)
-	{
-          if (cam_type == "ov2460")
-	  {
-            show(gainCeiling);
-          }
-          hide(agcGain);
-        }
-	else
-	{
-          if (cam_type == "ov2460")
-	  {
-            hide(gainCeiling);
-          }
-          show(agcGain);
-        }
-      }
-      else if(el.id === "awb_gain")
-      {
-        value ? show(wb) : hide(wb);
-      }
-    }
+    return Date.now().toString(16).padStart(12, "0") + parseInt(Math.random() * 100000000, 10).toString(16).padStart(8, "0");
   }
 
-  function updateConfig (el)
+  function query_send(query)
   {
-    let value;
+    fetch(query).then(
+      function(response)
+      {
+        console.log(`request to ${query} finished, status: ${response.status}`);
+      }
+    );
+  }
+
+  function config_update(el)
+  {
+    let value = 0;
+
     switch (el.type)
     {
       case 'checkbox':
         value = el.checked ? 1 : 0;
-        break
+        break;
       case 'range':
       case 'select-one':
         value = el.value;
@@ -107,162 +64,179 @@ function onContentLoaded(event)
         return;
     }
 
-    const query = `${baseHost}/control?var=${el.id}&val=${value}`;
-
-    fetch(query).then(
-      response =>
-      {
-        console.log(`request to ${query} finished, status: ${response.status}`);
-      }
-    )
+    query_send(`${url_base}/control?var=${el.id}&val=${value}`);
   }
 
-  document.querySelectorAll('.close').forEach(
-    el =>
+  function element_set_visible(el, value)
+  {
+    if (value)
     {
-      el.onclick = () =>
+      el.classList.remove('hidden');
+    }
+    else
+    {
+      el.classList.add('hidden');
+    }
+  }
+
+  function element_value_update(el, value)
+  {
+    let initialValue;
+
+    if (el.type === 'checkbox')
+    {
+      initialValue = el.checked;
+      value = !!value;
+      el.checked = value;
+    }
+    else
+    {
+      initialValue = el.value;
+      el.value = value;
+    }
+
+    if (el.id === "aec")
+    {
+      element_set_visible(exposure, value);
+    }
+    else if (el.id === "agc")
+    {
+      if (cam_type == "ov2460")
       {
-        hide(el.parentNode);
+        element_set_visible(gainCeiling, value);
       }
-    }
-  )
 
-  // read initial values
-  fetch(`${baseHost}/status`).then(
-    function(response)
+      element_set_visible(agcGain, !value);
+    }
+    else if (el.id === "awb_gain")
     {
-      return response.json();
+      element_set_visible(wb, value);
     }
-  ).then(
-    function(state)
-    {
-      document.querySelectorAll('.default-action').forEach(
-        el =>
-	{
-          updateValue(el, state[el.id], false);
-        }
-      )
-    }
-  )
+  }
 
-  const view = document.getElementById('stream');
-  const viewContainer = document.getElementById('stream-container');
-  const resetButton = document.getElementById('reset');
-  const stillButton = document.getElementById('get-still');
-  const streamButton = document.getElementById('toggle-stream');
-  const closeButton = document.getElementById('close-stream');
-  var is_streaming = false;
+  function status_update()
+  {
+    fetch(`${url_base}/status`).then(
+      function(response)
+      {
+        return response.json();
+      }
+    ).then(
+      function(state)
+      {
+        document.querySelectorAll('.default-action').forEach(
+          el =>
+          {
+            element_value_update(el, state[el.id]);
+          }
+	);
+      }
+    );
+  }
 
-  const stopStream = () =>
+  function stream_stop()
   {
     window.stop();
     streamButton.innerHTML = 'Start Stream';
     is_streaming = false;
-  };
+  }
 
-  const startStream = () =>
+  function stream_start()
   {
-    view.setAttribute("src", baseHost + "/stream?id=" + genId());
-    show(viewContainer);
+    view.setAttribute("src", url_base + "/stream?id=" + id_generate());
+    element_set_visible(viewContainer, true);
     streamButton.innerHTML = 'Stop Stream';
     is_streaming = true;
-  };
+  }
 
   resetButton.onclick = () =>
   {
-    fetch(`${baseHost}/reset`);
+    if (is_streaming)
+    {
+      stream_stop();
+    }
+
+    query_send(`${url_base}/reset`);
+
+    status_update();
   };
 
   stillButton.onclick = () =>
   {
     if (is_streaming)
     {
-      stopStream();
+      stream_stop();
     }
     else
     {
-      view.setAttribute("src", baseHost + "/capture?id=" + genId());
-      show(viewContainer);
+      view.setAttribute("src", url_base + "/capture?id=" + id_generate());
+      element_set_visible(viewContainer, true);
     }
   };
 
   closeButton.onclick = () =>
   {
-    stopStream();
-    hide(viewContainer);
+    stream_stop();
+    element_set_visible(viewContainer, false);
   };
 
   streamButton.onclick = () =>
   {
     if (is_streaming)
     {
-      stopStream()
+      stream_stop()
     }
     else
     {
-      startStream()
+      stream_start()
     }
   };
 
   // Attach default on change action
+
   document.querySelectorAll('.default-action').forEach(
     el =>
     {
-      el.onchange = () => updateConfig(el)
+      el.onchange = () => config_update(el);
     }
   );
 
-  // Custom actions
   // Gain
-  const agc = document.getElementById('agc');
-  const agcGain = document.getElementById('agc_gain-group');
-  const gainCeiling = document.getElementById('gainceiling-group');
+
   agc.onchange = () =>
   {
-    updateConfig(agc);
-    if (agc.checked)
+    config_update(agc);
+    if (cam_type == "ov2460")
     {
-      if (cam_type == "ov2460")
-      {
-        show(gainCeiling);
-      }
-      hide(agcGain);
+      element_set_visible(gainCeiling, agc.checked);
     }
-    else
-    {
-      if (cam_type == "ov2460")
-      {
-        hide(gainCeiling);
-      }
-      show(agcGain);
-    }
+    element_set_visible(agcGain, !agc.checked);
   }
 
   // Exposure
-  const aec = document.getElementById('aec');
-  const exposure = document.getElementById('aec_value-group');
+
   aec.onchange = () =>
   {
-    updateConfig(aec);
-    aec.checked ? hide(exposure) : show(exposure);
+    config_update(aec);
+    element_set_visible(exposure, !aec.checked);
   }
 
   // AWB
-  const awb = document.getElementById('awb_gain');
-  const wb = document.getElementById('wb_mode-group');
+
   awb.onchange = () =>
   {
-    updateConfig(awb);
-    awb.checked ? show(wb) : hide(wb);
+    config_update(awb);
+    element_set_visible(web, awb.checked);
   }
 
   // framesize
-  const framesize = document.getElementById('framesize')
 
   framesize.onchange = () =>
   {
-    updateConfig(framesize);
+    config_update(framesize);
   };
+
+  status_update();
 }
 
 document.addEventListener('DOMContentLoaded', onContentLoaded);
