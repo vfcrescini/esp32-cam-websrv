@@ -1,3 +1,11 @@
+2023-02-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/camera.c:
+
+	  - Flash state is now set back to default in
+	    camwebsrv_camera_reset().
+
+
 2023-02-25  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* storage/script.js:

@@ -77,7 +77,6 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
   }
 
   pcam->fb = NULL;
-  pcam->flash = CAMWEBSRV_CAMERA_DEFAULT_FLASH;
   pcam->ov3660 = false;
   pcam->tstamp = 0;
 
@@ -841,18 +840,25 @@ static esp_err_t _camwebsrv_camera_init(_camwebsrv_camera_t *pcam)
     sensor->set_saturation(sensor, -2);
   }
 
+  // assert pixformat
+
+  if (sensor->pixformat != PIXFORMAT_JPEG)
+  {
+      ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): sensor.pixformat is not JPEG");
+      return ESP_FAIL;
+  }
+
   // set framesize
 
-  if (sensor->pixformat == PIXFORMAT_JPEG)
+  if (sensor->set_framesize(sensor, (framesize_t) CAMWEBSRV_CAMERA_DEFAULT_FS))
   {
-    if (sensor->set_framesize(sensor, (framesize_t) CAMWEBSRV_CAMERA_DEFAULT_FS))
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
-      return ESP_FAIL;
-    }
+    ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
+    return ESP_FAIL;
   }
 
   // set flash
+
+  pcam->flash = CAMWEBSRV_CAMERA_DEFAULT_FLASH;
 
   if (gpio_set_level(CAMWEBSRV_PIN_FLASH, pcam->flash) != ESP_OK)
   {
