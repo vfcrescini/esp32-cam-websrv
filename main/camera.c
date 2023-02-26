@@ -78,7 +78,7 @@ esp_err_t camwebsrv_camera_init(camwebsrv_camera_t *cam)
 
   pcam->fb = NULL;
   pcam->ov3660 = false;
-  pcam->tstamp = 0;
+  pcam->tstamp = -1;
 
   // set flash led gpio
 
@@ -186,9 +186,7 @@ esp_err_t camwebsrv_camera_reset(camwebsrv_camera_t cam)
   if (pcam->fb != NULL)
   {
     esp_camera_fb_return(pcam->fb);
-
     pcam->fb = NULL;
-    pcam->tstamp = 0;
   }
 
   // de-init
@@ -214,6 +212,10 @@ esp_err_t camwebsrv_camera_reset(camwebsrv_camera_t cam)
     xSemaphoreGive(pcam->mutex1);
     return ESP_FAIL;
   }
+
+  // reset timestamp
+
+  pcam->tstamp = -1;
 
   // unnlock
 
@@ -250,6 +252,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
   if ((now - pcam->tstamp) >= (1000000 / CAMWEBSRV_CAMERA_STREAM_FPS))
   {
     sensor_t *sensor = NULL;
+    uint8_t i;
 
     // return previous frame
 
@@ -272,26 +275,24 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
       return ESP_FAIL;
     }
 
-    // get frame
+    // get frame, but skip the first couple of frames if this is the first grab
 
-    pcam->fb = esp_camera_fb_get();
-
-    if (pcam->fb == NULL)
+    for (i = 0; i < (pcam->tstamp >= 0 ? 1 : CAMWEBSRV_CAMERA_INITIAL_FRAME_SKIP); i++)
     {
-      ESP_LOGE(CAMWEBSRV_TAG, "CAM (): camwebsrv_camera_frame_grab(): esp_camera_fb_get() failed");
-      xSemaphoreGive(pcam->mutex2);
-      return ESP_FAIL;
-    }
+      if (i > 0)
+      {
+        esp_camera_fb_return(pcam->fb);
+        vTaskDelay((1000 / CAMWEBSRV_CAMERA_STREAM_FPS) / portTICK_PERIOD_MS);
+      }
 
-    // JPEG?
-    // XXX do we really need to check every time?
+      pcam->fb = esp_camera_fb_get();
 
-    if (pcam->fb->format != PIXFORMAT_JPEG)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "CAM camwebsrv_camera_frame(): failed; unsupported camera pixel format");
-      esp_camera_fb_return(pcam->fb);
-      xSemaphoreGive(pcam->mutex2);
-      return ESP_FAIL;
+      if (pcam->fb == NULL)
+      {
+        ESP_LOGE(CAMWEBSRV_TAG, "CAM (): camwebsrv_camera_frame_grab(): esp_camera_fb_get() failed");
+        xSemaphoreGive(pcam->mutex2);
+        return ESP_FAIL;
+      }
     }
 
     pcam->tstamp = now;
