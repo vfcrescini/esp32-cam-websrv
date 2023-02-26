@@ -30,6 +30,7 @@ typedef struct
   bool flash;
   bool ov3660;
   int64_t tstamp;
+  uint8_t fps;
   SemaphoreHandle_t mutex1;
   SemaphoreHandle_t mutex2;
 } _camwebsrv_camera_t;
@@ -249,7 +250,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
 
   now = esp_timer_get_time();
 
-  if ((now - pcam->tstamp) >= (1000000 / CAMWEBSRV_CAMERA_STREAM_FPS))
+  if ((now - pcam->tstamp) >= (1000000 / pcam->fps))
   {
     sensor_t *sensor = NULL;
     uint8_t i;
@@ -282,7 +283,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
       if (i > 0)
       {
         esp_camera_fb_return(pcam->fb);
-        vTaskDelay((1000 / CAMWEBSRV_CAMERA_STREAM_FPS) / portTICK_PERIOD_MS);
+        vTaskDelay((1000 / pcam->fps) / portTICK_PERIOD_MS);
       }
 
       pcam->fb = esp_camera_fb_get();
@@ -497,6 +498,10 @@ esp_err_t camwebsrv_camera_ctrl_set(camwebsrv_camera_t cam, const char *name, in
       xSemaphoreGive(pcam->mutex1);
       return ESP_FAIL;
     }
+  }
+  else if (strcmp(name, "fps") == 0)
+  {
+    pcam->fps = (value < CAMWEBSRV_CAMERA_FPS_MIN ? CAMWEBSRV_CAMERA_FPS_MIN : (value > CAMWEBSRV_CAMERA_FPS_MAX ? CAMWEBSRV_CAMERA_FPS_MAX : value));
   }
   else if (strcmp(name, "framesize") == 0)
   {
@@ -713,6 +718,10 @@ int camwebsrv_camera_ctrl_get(camwebsrv_camera_t cam, const char *name)
   {
     rv = pcam->flash;
   }
+  else if (strcmp(name, "fps") == 0)
+  {
+    rv = pcam->fps;
+  }
   else if (strcmp(name, "framesize") == 0)
   {
     rv = sensor->status.framesize;
@@ -866,6 +875,10 @@ static esp_err_t _camwebsrv_camera_init(_camwebsrv_camera_t *pcam)
     ESP_LOGE(CAMWEBSRV_TAG, "CAM _camwebsrv_camera_init(): sensor.set_framesize(%d) failed", CAMWEBSRV_CAMERA_DEFAULT_FS);
     return ESP_FAIL;
   }
+
+  // set fps
+
+  pcam->fps = CAMWEBSRV_CAMERA_DEFAULT_FPS;
 
   // set flash
 

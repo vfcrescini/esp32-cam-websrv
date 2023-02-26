@@ -2,6 +2,27 @@
 
 	* main/config.h:
 
+	  - Added the following definitions:
+
+	    - CAMWEBSRV_CAMERA_FPS_MIN: 1
+	    - CAMWEBSRV_CAMERA_FPS_MAX: 8
+	    - CAMWEBSRV_CAMERA_DEFAULT_FPS: 4
+
+	* main/httpd.c:
+	* main/camera.c:
+
+	  - Added new fps configuration parameter.
+
+	* storage/ov2640.htm:
+	* storage/ov3660.htm:
+
+	  - Added new FPS slider control.
+
+
+2023-02-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/config.h:
+
 	  - Added CAMWEBSRV_CAMERA_INITIAL_FRAME_SKIP; set to 3.
 
 	* main/camera.c:

@@ -50,6 +50,7 @@
   \"contrast\": %d,\n\
   \"dcw\": %u,\n\
   \"flash\": %d,\n\
+  \"fps\": %d,\n\
   \"framesize\": %u,\n\
   \"gainceiling\": %u,\n\
   \"hmirror\": %u,\n\
@@ -391,6 +392,7 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     camwebsrv_camera_ctrl_get(phttpd->cam, "contrast"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "dcw"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "flash"),
+    camwebsrv_camera_ctrl_get(phttpd->cam, "fps"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "framesize"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "gainceiling"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "hmirror"),
