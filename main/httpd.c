@@ -434,6 +434,17 @@ static esp_err_t _camwebsrv_httpd_handler_reset(httpd_req_t *req)
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_status(req, "200 OK");
 
+  // boot out all clients
+
+  rv = camwebsrv_sclients_purge(phttpd->sclients, phttpd->handle);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_reset(): camwebsrv_sclients_purge() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
+    return rv;
+  }
+
   // reset
 
   rv = camwebsrv_camera_reset(phttpd->cam);

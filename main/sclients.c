@@ -68,6 +68,7 @@ esp_err_t _camwebsrv_sclients_node_send_str(_camwebsrv_sclients_node_t *pnode, c
 esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool *flushed);
 esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint8_t *fbuf, size_t flen);
 esp_err_t _camwebsrv_sclients_sock_get_peer(int sockfd, char *caddr);
+esp_err_t _camwebsrv_sclients_purge(_camwebsrv_sclients_node_t **plist, httpd_handle_t handle);
 
 esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
 {
@@ -115,8 +116,8 @@ esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
 
 esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle_t handle)
 {
-   _camwebsrv_sclients_t *pclients;
-   _camwebsrv_sclients_node_t *plist;
+  _camwebsrv_sclients_t *pclients;
+  esp_err_t rv; 
 
   if (clients == NULL)
   {
@@ -132,19 +133,11 @@ esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle
 
   xSemaphoreTake(pclients->mutex, portMAX_DELAY);
 
-  plist = pclients->list;
+  rv = _camwebsrv_sclients_purge(&(pclients->list), handle);
 
-  while(plist != NULL)
+  if (rv != ESP_OK)
   {
-    if (plist->sockfd > 0)
-    {
-      httpd_sess_trigger_close(handle, plist->sockfd);
-    }
-    if (plist->sockbuf != NULL)
-    {
-      camwebsrv_vbytes_destroy(&(plist->sockbuf));
-    }
-    plist = plist->next;
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_destroy(): _camwebsrv_sclients_purge() failed: [%d]: %s", rv, esp_err_to_name(rv));
   }
 
   *clients = NULL;
@@ -307,6 +300,35 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
   // done
 
   ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): Added client %s", sockfd, caddr);
+
+  return ESP_OK;
+}
+
+esp_err_t camwebsrv_sclients_purge(camwebsrv_sclients_t clients, httpd_handle_t handle)
+{
+  _camwebsrv_sclients_t *pclients;
+  esp_err_t rv;
+
+  if (clients == NULL)
+  {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  pclients = (_camwebsrv_sclients_t *) clients;
+
+  xSemaphoreTake(pclients->mutex, portMAX_DELAY);
+
+  rv = _camwebsrv_sclients_purge(&(pclients->list), handle);
+
+  xSemaphoreGive(pclients->mutex);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_purge(): _camwebsrv_sclients_purge() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return rv;
+  }
+
+  ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_purge(): Removed all clients");
 
   return ESP_OK;
 }
@@ -802,6 +824,52 @@ esp_err_t _camwebsrv_sclients_sock_get_peer(int sockfd, char *caddr)
   }
 
   sprintf(caddr, "%s:%d", tip, ntohs(_CAMWEBSRV_SCLIENTS_PORT(addr)));
+
+  return ESP_OK;
+}
+
+esp_err_t _camwebsrv_sclients_purge(_camwebsrv_sclients_node_t **plist, httpd_handle_t handle)
+{
+  _camwebsrv_sclients_node_t *cnode;
+  _camwebsrv_sclients_node_t *tnode;
+  esp_err_t rv;
+
+  cnode = *plist;
+
+  while(cnode != NULL)
+  {
+    // be graceful and try to flush out the buffer first
+
+    rv = _camwebsrv_sclients_node_flush(cnode, NULL);
+
+    if (rv != ESP_OK)
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_purge(%d): _camwebsrv_sclients_node_flush() failed: [%d]: %s", cnode->sockfd, rv, esp_err_to_name(rv));
+    }
+
+    // kill session
+
+    if (cnode->sockfd > 0)
+    {
+      httpd_sess_trigger_close(handle, cnode->sockfd);
+    }
+
+    // destroy buffer
+
+    if (cnode->sockbuf != NULL)
+    {
+      camwebsrv_vbytes_destroy(&(cnode->sockbuf));
+    }
+
+    tnode = cnode;
+    cnode = cnode->next;
+
+    ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_purge(%d): Removed client", tnode->sockfd);
+
+    free(tnode);
+  }
+
+  *plist = NULL;
 
   return ESP_OK;
 }

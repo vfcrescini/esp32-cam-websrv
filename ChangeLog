@@ -2,6 +2,23 @@
 
 	* main/camera.c:
 
+	  - When resetting, return pending frame first.
+
+	* main/httpd.c:
+
+	  - When resetting, disconnect all connected stream clients.
+
+	* main/sclients.h:
+	* main/sclients.c:
+
+	  - Added camwebsrv_sclients_purge() to disconnect all connected
+	    clients.
+
+
+2023-02-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/camera.c:
+
 	  - Flash state is now set back to default in
 	    camwebsrv_camera_reset().
 

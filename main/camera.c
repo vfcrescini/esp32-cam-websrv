@@ -181,6 +181,16 @@ esp_err_t camwebsrv_camera_reset(camwebsrv_camera_t cam)
     return ESP_FAIL;
   }
 
+  // if we're still holding on to a frame, give it back
+
+  if (pcam->fb != NULL)
+  {
+    esp_camera_fb_return(pcam->fb);
+
+    pcam->fb = NULL;
+    pcam->tstamp = 0;
+  }
+
   // de-init
 
   rv = esp_camera_deinit();

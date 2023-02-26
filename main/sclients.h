@@ -15,6 +15,7 @@ typedef void *camwebsrv_sclients_t;
 esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients);
 esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle_t handle);
 esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd);
+esp_err_t camwebsrv_sclients_purge(camwebsrv_sclients_t clients, httpd_handle_t handle);
 esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_camera_t cam, httpd_handle_t handle);
 
 #endif
