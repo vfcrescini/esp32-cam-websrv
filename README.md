@@ -14,6 +14,10 @@ https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/
 * Added read-only FAT12 partition.
 * WIFI SSID and password are now configuration parameters that are read from a configuration file in the FAT12 partition.
 * The static webpage data (HTML, CSS and Javascript) are now stored as separate files in the FAT12 parition instead of being hard-coded byte array in a header file.
+* A single HTTPD instance (on port 80) serves the static pages, control API, still image and MJPEG stream.
+* Multiple clients can view the MJPEG stream simultaneously.
+* Added stream framerate control (1 FPS min, 8 FPS max, 4 FPS default).
+* Added camera reset button.
 
 ## Build dependency components
 
