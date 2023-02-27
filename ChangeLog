@@ -1,5 +1,9 @@
 2023-02-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* VERSION:
+
+	  - Updated to 0.0.1.br-fix_streaming-1.
+
 	* main/httpd.c:
 	* main/sclients.c:
 
