@@ -1,3 +1,11 @@
+2023-02-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/httpd.c:
+	* main/sclients.c:
+
+	  - Now uses camwebsrv_vbytes_t to compose HTTP headers.
+
+
 2023-02-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/config.h:

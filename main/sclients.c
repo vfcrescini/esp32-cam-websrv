@@ -27,7 +27,21 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-#define _CAMWEBSRV_SCLIENTS_MULTIPART_HEADER_BOUNDARY "U8dOTFrG6WId0hT/TDkN2gx+0TvJCcSMFl7b/3B/B1j86B1GYo3LnEh491bJJ7/BwkRWQXX"
+#define _CAMWEBSRV_SCLIENTS_RESP_HDR_MAIN_STR "\
+HTTP/1.1 200 OK\r\n\
+Content-Type: multipart/x-mixed-replace;boundary=0123456789ABCDEF\r\n\
+Transfer-Encoding: chunked\r\n\
+Access-Control-Allow-Origin: *\r\n\
+\r\n\
+"
+
+#define _CAMWEBSRV_SCLIENTS_RESP_HDR_CHUNK_STR "\
+14\r\n--0123456789ABCDEF\r\n\r\n\
+1A\r\nContent-Type: image/jpeg\r\n\r\n\
+%x\r\nContent-Length: %u\r\n\r\n\
+2\r\n\r\n\r\n\
+%x\r\n\
+"
 
 #if CONFIG_LWIP_IPV6
   #define _CAMWEBSRV_SCLIIENTS_SOCKADDR_IN_T   struct sockaddr_in6
@@ -227,55 +241,11 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
   // load http headers in buffer
   // XXX: instead of loading into the buffer, consider attempting to write to the socket instead
 
-  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, "HTTP/1.1 200 OK\r\n");
+  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, _CAMWEBSRV_SCLIENTS_RESP_HDR_MAIN_STR);
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(1) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-    camwebsrv_vbytes_destroy(&(pnode->sockbuf));
-    free(pnode);
-    xSemaphoreGive(pclients->mutex);
-    return rv;
-  }
-
-  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, "Content-Type: multipart/x-mixed-replace;boundary=%s\r\n", _CAMWEBSRV_SCLIENTS_MULTIPART_HEADER_BOUNDARY);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(2) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-    camwebsrv_vbytes_destroy(&(pnode->sockbuf));
-    free(pnode);
-    xSemaphoreGive(pclients->mutex);
-    return rv;
-  }
-
-  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, "Transfer-Encoding: chunked\r\n");
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(3) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-    camwebsrv_vbytes_destroy(&(pnode->sockbuf));
-    free(pnode);
-    xSemaphoreGive(pclients->mutex);
-    return rv;
-  }
-
-  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, "Access-Control-Allow-Origin: *\r\n");
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(4) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-    camwebsrv_vbytes_destroy(&(pnode->sockbuf));
-    free(pnode);
-    xSemaphoreGive(pclients->mutex);
-    return rv;
-  }
-
-  rv = camwebsrv_vbytes_append_str(pnode->sockbuf, "\r\n");
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append(5) failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_add(%d): camwebsrv_vbytes_append_str() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
     camwebsrv_vbytes_destroy(&(pnode->sockbuf));
     free(pnode);
     xSemaphoreGive(pclients->mutex);
@@ -728,9 +698,15 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
 {
   esp_err_t rv;
 
-  // boundary
+  // chunk header
 
-  rv = _camwebsrv_sclients_node_send_str(pnode, "%x\r\n--%s\r\n\r\n", strlen(_CAMWEBSRV_SCLIENTS_MULTIPART_HEADER_BOUNDARY) + 2 + 2, _CAMWEBSRV_SCLIENTS_MULTIPART_HEADER_BOUNDARY);
+  rv = _camwebsrv_sclients_node_send_str(
+    pnode,
+    _CAMWEBSRV_SCLIENTS_RESP_HDR_CHUNK_STR,
+    18 + _camwebsrv_sclients_count_digits(flen),
+    flen,
+    flen
+  );
 
   if (rv != ESP_OK)
   {
@@ -738,63 +714,23 @@ esp_err_t _camwebsrv_sclients_node_frame(_camwebsrv_sclients_node_t *pnode, uint
     return ESP_FAIL;
   }
 
-  // content-type
-
-  rv = _camwebsrv_sclients_node_send_str(pnode, "%x\r\nContent-Type: image/jpeg\r\n\r\n", 26);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(2) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
-    return ESP_FAIL;
-  }
-
-  // content-length
-
-  rv = _camwebsrv_sclients_node_send_str(pnode, "%x\r\nContent-Length: %u\r\n\r\n", 18 + _camwebsrv_sclients_count_digits(flen), flen);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(3) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
-    return ESP_FAIL;
-  }
-
-  // blank
-
-  rv = _camwebsrv_sclients_node_send_str(pnode, "%x\r\n\r\n\r\n", 2);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(4) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
-    return ESP_FAIL;
-  }
-
-  // frame length
-
-  rv = _camwebsrv_sclients_node_send_str(pnode, "%x\r\n", flen);
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(5) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
-    return ESP_FAIL;
-  }
-
-  // frame data
+  // chunk data
 
   rv = _camwebsrv_sclients_node_send_bytes(pnode, fbuf, flen);
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_bytes(6) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_bytes() failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 
-  // end
+  // chunk end
 
   rv = _camwebsrv_sclients_node_send_str(pnode, "\r\n");
 
   if (rv != ESP_OK)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(7) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
+    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS _camwebsrv_sclients_node_frame(%d): _camwebsrv_sclients_node_send_str(1) failed: [%d]: %s", pnode->sockfd, rv, esp_err_to_name(rv));
     return ESP_FAIL;
   }
 

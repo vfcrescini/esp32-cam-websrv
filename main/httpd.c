@@ -7,6 +7,7 @@
 #include "camera.h"
 #include "sclients.h"
 #include "storage.h"
+#include "vbytes.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -33,7 +34,6 @@
 #define _CAMWEBSRV_HTTPD_PATH_CAPTURE "/capture"
 #define _CAMWEBSRV_HTTPD_PATH_STREAM  "/stream"
 
-#define _CAMWEBSRV_HTTPD_RESP_STATUS_LEN 1024
 #define _CAMWEBSRV_HTTPD_RESP_STATUS_STR "\
 {\n\
   \"aec\": %u,\n\
@@ -359,8 +359,9 @@ static esp_err_t _camwebsrv_httpd_handler_static(httpd_req_t *req)
 static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
 {
   esp_err_t rv = ESP_OK;
-  char buf[_CAMWEBSRV_HTTPD_RESP_STATUS_LEN];
   _camwebsrv_httpd_t *phttpd;
+  camwebsrv_vbytes_t vb;
+  const uint8_t *buf;
 
   phttpd = (_camwebsrv_httpd_t *) httpd_get_global_user_ctx(req->handle);
 
@@ -372,11 +373,16 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
 
   // initialise and compose response buffer
 
-  memset(buf, 0x00, sizeof(buf));
+  rv = camwebsrv_vbytes_init(&vb);
 
-  snprintf(
-    buf,
-    _CAMWEBSRV_HTTPD_RESP_STATUS_LEN - 1,
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(): camwebsrv_vbytes_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return rv;
+  }
+
+  rv = camwebsrv_vbytes_set_str(
+    vb,
     _CAMWEBSRV_HTTPD_RESP_STATUS_STR,
     camwebsrv_camera_ctrl_get(phttpd->cam, "aec"),
     camwebsrv_camera_ctrl_get(phttpd->cam, "aec2"),
@@ -407,9 +413,25 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     camwebsrv_camera_ctrl_get(phttpd->cam, "wpc")
   );
 
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(): camwebsrv_vbytes_set_str() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    camwebsrv_vbytes_destroy(&vb);
+    return rv;
+  }
+
+  rv  = camwebsrv_vbytes_get_bytes(vb, &buf, NULL);
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(): camwebsrv_vbytes_get_bytes() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    camwebsrv_vbytes_destroy(&vb);
+    return rv;
+  }
+
   // send response
 
-  rv = httpd_resp_sendstr(req, buf);
+  rv = httpd_resp_sendstr(req, (char *) buf);
 
   if (rv != ESP_OK)
   {
@@ -417,6 +439,8 @@ static esp_err_t _camwebsrv_httpd_handler_status(httpd_req_t *req)
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, NULL);
     return rv;
   }
+
+  camwebsrv_vbytes_destroy(&vb);
 
   ESP_LOGI(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_handler_status(%d): served %s", httpd_req_to_sockfd(req), req->uri);
 
