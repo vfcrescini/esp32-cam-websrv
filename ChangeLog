@@ -2,7 +2,7 @@
 
 	* VERSION:
 
-	  - Updated to 0.0.1.br-fix_streaming-1.
+	  - Updated to v0.1.0.
 
 	* main/httpd.c:
 	* main/sclients.c:
