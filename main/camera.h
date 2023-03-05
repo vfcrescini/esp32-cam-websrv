@@ -20,6 +20,7 @@ esp_err_t camwebsrv_camera_frame_grab(camwebsrv_camera_t cam, uint8_t **fbuf, si
 esp_err_t camwebsrv_camera_frame_dispose(camwebsrv_camera_t cam);
 esp_err_t camwebsrv_camera_ctrl_set(camwebsrv_camera_t cam, const char *name, int value);
 int camwebsrv_camera_ctrl_get(camwebsrv_camera_t cam, const char *name);
+uint8_t camwebsrv_camera_fps_get(camwebsrv_camera_t cam);
 bool camwebsrv_camera_is_ov3660(camwebsrv_camera_t cam);
 
 #endif

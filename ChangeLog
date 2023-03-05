@@ -1,3 +1,11 @@
+2023-03-06  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/camera.c:
+	* main/camera.h:
+
+	  - Added camwebsrv_camera_fps_get().
+
+
 2023-03-01  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* VERSION:

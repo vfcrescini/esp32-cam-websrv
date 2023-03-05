@@ -795,6 +795,20 @@ bool camwebsrv_camera_is_ov3660(camwebsrv_camera_t cam)
   return pcam->ov3660;
 }
 
+uint8_t camwebsrv_camera_fps_get(camwebsrv_camera_t cam)
+{
+  _camwebsrv_camera_t *pcam;
+
+  if (cam == NULL)
+  {
+    return 0;
+  }
+
+  pcam = (_camwebsrv_camera_t *) cam;
+
+  return pcam->fps;
+}
+
 static esp_err_t _camwebsrv_camera_init(_camwebsrv_camera_t *pcam)
 {
   esp_err_t rv;
