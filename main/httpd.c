@@ -71,6 +71,7 @@
 typedef struct
 {
   httpd_handle_t handle;
+  SemaphoreHandle_t sema;
   camwebsrv_camera_t cam;
   camwebsrv_sclients_t sclients;
 } _camwebsrv_httpd_t;
@@ -91,12 +92,12 @@ static bool _camwebsrv_httpd_static_cb(const char *buf, size_t len, void *arg);
 static void _camwebsrv_httpd_worker(void *arg);
 static void _camwebsrv_httpd_noop(void *arg);
 
-esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd)
+esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd, SemaphoreHandle_t sema)
 {
   _camwebsrv_httpd_t *phttpd;
   esp_err_t rv;
 
-  if (httpd == NULL)
+  if (httpd == NULL || sema == NULL)
   {
     return ESP_ERR_INVALID_ARG;
   }
@@ -111,6 +112,8 @@ esp_err_t camwebsrv_httpd_init(camwebsrv_httpd_t *httpd)
   }
 
   memset(phttpd, 0x00, sizeof(_camwebsrv_httpd_t));
+
+  phttpd->sema = sema;
 
   rv = camwebsrv_camera_init(&(phttpd->cam));
 
@@ -293,7 +296,7 @@ esp_err_t camwebsrv_httpd_start(camwebsrv_httpd_t httpd)
   return ESP_OK;
 }
 
-esp_err_t camwebsrv_httpd_process(camwebsrv_httpd_t httpd)
+esp_err_t camwebsrv_httpd_process(camwebsrv_httpd_t httpd, uint16_t *nextevent)
 {
   _camwebsrv_httpd_t *phttpd;
   esp_err_t rv;
@@ -305,7 +308,7 @@ esp_err_t camwebsrv_httpd_process(camwebsrv_httpd_t httpd)
 
   phttpd = (_camwebsrv_httpd_t *) httpd;
 
-  rv = camwebsrv_sclients_process(phttpd->sclients, phttpd->cam, phttpd->handle);
+  rv = camwebsrv_sclients_process(phttpd->sclients, phttpd->cam, phttpd->handle, nextevent);
 
   if (rv != ESP_OK)
   {
@@ -725,6 +728,10 @@ static void _camwebsrv_httpd_worker(void *arg)
     ESP_LOGE(CAMWEBSRV_TAG, "HTTPD _camwebsrv_httpd_worker(): camwebsrv_sclients_add() failed: [%d]: %s", rv, esp_err_to_name(rv));
     httpd_sess_trigger_close(parg->phttpd->handle, parg->sockfd);
   }
+
+  // trigger new event
+  
+  xSemaphoreGive(parg->phttpd->sema);
 
   free(parg);
 }

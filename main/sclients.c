@@ -62,15 +62,14 @@ typedef struct _camwebsrv_sclients_node_t
   int sockfd;
   camwebsrv_vbytes_t sockbuf;
   struct _camwebsrv_sclients_node_t *next;
-  int64_t idle;
-  int64_t tstamp;
+  int64_t tframelast;
+  int64_t twritelast;
 } _camwebsrv_sclients_node_t;
 
 typedef struct
 {
   _camwebsrv_sclients_node_t *list;
   SemaphoreHandle_t mutex;
-  SemaphoreHandle_t sflag;
 } _camwebsrv_sclients_t;
 
 size_t _camwebsrv_sclients_count_digits(size_t n);
@@ -111,16 +110,6 @@ esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
     return ESP_FAIL;
   }
 
-  pclients->sflag = xSemaphoreCreateBinary();
-
-  if (pclients->sflag == NULL)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_init(): xSemaphoreCreateBinary() failed");
-    vSemaphoreDelete(pclients->mutex);
-    free(pclients);
-    return ESP_FAIL;
-  }
-
   pclients->list = NULL;
 
   *clients = pclients;
@@ -131,7 +120,7 @@ esp_err_t camwebsrv_sclients_init(camwebsrv_sclients_t *clients)
 esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle_t handle)
 {
   _camwebsrv_sclients_t *pclients;
-  esp_err_t rv; 
+  esp_err_t rv;
 
   if (clients == NULL)
   {
@@ -156,15 +145,6 @@ esp_err_t camwebsrv_sclients_destroy(camwebsrv_sclients_t *clients, httpd_handle
 
   *clients = NULL;
 
-  // these _should_ release tasks that are blocked on these semaphores prior to
-  // them being destroyed
-
-  if (uxSemaphoreGetCount(pclients->sflag) == 0)
-  {
-    xSemaphoreGive(pclients->sflag);
-  }
-
-  vSemaphoreDelete(pclients->sflag);
   xSemaphoreGive(pclients->mutex);
   vSemaphoreDelete(pclients->mutex);
 
@@ -226,7 +206,8 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
 
   pnode->sockfd = sockfd;
   pnode->next = pclients->list;
-  pnode->idle = esp_timer_get_time();
+  pnode->tframelast = 0;
+  pnode->twritelast = esp_timer_get_time();
 
   rv = camwebsrv_vbytes_init(&(pnode->sockbuf));
 
@@ -255,13 +236,6 @@ esp_err_t camwebsrv_sclients_add(camwebsrv_sclients_t clients, int sockfd)
   // attach to list
 
   pclients->list = pnode;
-
-  // ensure semaphore flag is up
-
-  if (uxSemaphoreGetCount(pclients->sflag) == 0)
-  {
-    xSemaphoreGive(pclients->sflag);
-  }
 
   // release mutex
 
@@ -303,7 +277,7 @@ esp_err_t camwebsrv_sclients_purge(camwebsrv_sclients_t clients, httpd_handle_t 
   return ESP_OK;
 }
 
-esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_camera_t cam, httpd_handle_t handle)
+esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_camera_t cam, httpd_handle_t handle, uint16_t *nextevent)
 {
   esp_err_t rv;
   _camwebsrv_sclients_t *pclients;
@@ -317,14 +291,6 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
   }
 
   pclients = (_camwebsrv_sclients_t *) clients;
-
-  // block until there is actually something to do
-
-  if (xSemaphoreTake(pclients->sflag, portMAX_DELAY) != pdTRUE)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(): xSemaphoreTake(semaphore) failed");
-    return ESP_FAIL;
-  }
 
   // get mutex
 
@@ -343,11 +309,11 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
   {
     bool flushed = false;
     int sockfd = curr->sockfd;
-    int64_t ctime = esp_timer_get_time();
+    int64_t tnow = esp_timer_get_time();
 
-    // first, check the idle timer
+    // check the idle timer
 
-    if ((ctime - curr->idle) > (CAMWEBSRV_SCLIENTS_IDLE_TMOUT * 1000))
+    if ((tnow - curr->twritelast) > (CAMWEBSRV_SCLIENTS_IDLE_TMOUT * 1000))
     {
       ESP_LOGW(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): exceeded idle time limit", sockfd);
       goto rm_client;
@@ -363,42 +329,55 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       goto rm_client;
     }
 
-    // if the socket buffer is empty, get, send and dispose new frame
+    // is the buffer empty?
 
     if (flushed)
     {
-      uint8_t *fbuf = NULL;
-      size_t flen = 0;
-      int64_t tstamp = 0;
+      // has enough time lapsed since the last frame?
 
-      rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen, &tstamp);
-
-      if (rv != ESP_OK)
+      if (tnow > (curr->tframelast + (1000000 / camwebsrv_camera_fps_get(cam))))
       {
-        ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): camwebsrv_camera_frame_grab() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
-        goto rm_client;
-      }
+        uint8_t *fbuf = NULL;
+        size_t flen = 0;
+        int64_t ftstamp = 0;
 
-      // compare the timestamp of the new frame against the frame that we've
-      // sent previously. no need to send the same frame more than once.
+        // get, send and dispose new frame
 
-      if (tstamp > curr->tstamp)
-      {
+        rv = camwebsrv_camera_frame_grab(cam, &fbuf, &flen, &ftstamp);
+
+        if (rv != ESP_OK)
+        {
+          ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): camwebsrv_camera_frame_grab() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
+          goto rm_client;
+        }
+
         rv = _camwebsrv_sclients_node_frame(curr, fbuf, flen);
-      }
 
-      camwebsrv_camera_frame_dispose(cam);
+        camwebsrv_camera_frame_dispose(cam);
 
-      if (tstamp > curr->tstamp)
-      {
         if (rv != ESP_OK)
         {
           ESP_LOGE(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): _camwebsrv_sclients_node_frame() failed: [%d]: %s", sockfd, rv, esp_err_to_name(rv));
           goto rm_client;
         }
-      }
 
-      curr->tstamp = tstamp;
+        curr->tframelast = ftstamp;
+      }
+    }
+
+    // the next event for this client is ASAP if there is something in the
+    // buffer, or whenever the next frame is due, otherwise
+
+    if (nextevent != NULL)
+    {
+      if (camwebsrv_vbytes_length(curr->sockbuf) > 0)
+      {
+        *nextevent = CAMWEBSRV_MAIN_MIN_CYCLE_MSEC;
+      }
+      else
+      {
+        *nextevent = 1000 / camwebsrv_camera_fps_get(cam);
+      }
     }
 
     prev = curr;
@@ -429,13 +408,6 @@ esp_err_t camwebsrv_sclients_process(camwebsrv_sclients_t clients, camwebsrv_cam
       free(temp);
 
       ESP_LOGI(CAMWEBSRV_TAG, "SCLIENTS camwebsrv_sclients_process(%d): Removed client", sockfd);
-  }
-
-  // ensure semaphore flag is up if there is at least one client left
-
-  if (uxSemaphoreGetCount(pclients->sflag) == 0 && pclients->list != NULL)
-  {
-    xSemaphoreGive(pclients->sflag);
   }
 
   // release mutex
@@ -555,7 +527,7 @@ esp_err_t _camwebsrv_sclients_node_send_bytes(_camwebsrv_sclients_node_t *pnode,
 
     // update idle timer
 
-    pnode->idle = esp_timer_get_time();
+    pnode->twritelast = esp_timer_get_time();
 
     // increment stuff
 
@@ -671,7 +643,7 @@ esp_err_t _camwebsrv_sclients_node_flush(_camwebsrv_sclients_node_t *pnode, bool
 
     // update idle timer
 
-    pnode->idle = esp_timer_get_time();
+    pnode->twritelast = esp_timer_get_time();
 
     // reset buffer to whatever remains unsent
 

@@ -13,6 +13,7 @@
 #include <esp_system.h>
 
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 void app_main()
@@ -20,7 +21,7 @@ void app_main()
   esp_err_t rv;
   camwebsrv_cfgman_t cfgman;
   camwebsrv_httpd_t httpd;
-  TickType_t last;
+  SemaphoreHandle_t sema;
 
   // initialise storage
 
@@ -62,9 +63,19 @@ void app_main()
     return;
   }
 
+  // initialise sema
+
+  sema = xSemaphoreCreateBinary();
+
+  if (sema == NULL)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): xSemaphoreCreateBinary() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return;
+  }
+
   // initialise web server
 
-  rv = camwebsrv_httpd_init(&httpd);
+  rv = camwebsrv_httpd_init(&httpd, sema);
 
   if (rv != ESP_OK)
   {
@@ -84,11 +95,11 @@ void app_main()
 
   // process stream requests indefinitely
 
-  last = xTaskGetTickCount();
-
   while(1)
   {
-    rv = camwebsrv_httpd_process(httpd);
+    uint16_t nextevent = UINT16_MAX;
+
+    rv = camwebsrv_httpd_process(httpd, &nextevent);
 
     if (rv != ESP_OK)
     {
@@ -96,6 +107,8 @@ void app_main()
       return;
     }
 
-    xTaskDelayUntil(&last, pdMS_TO_TICKS(CAMWEBSRV_MAIN_MSECS_PER_TICK));
+    // block until there is actually something to do
+
+    xSemaphoreTake(sema, (nextevent == UINT16_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(nextevent));
   }
 }

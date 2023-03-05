@@ -1,5 +1,21 @@
 2023-03-06  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/httpd.c:
+	* main/httpd.h:
+	* main/sclients.c:
+	* main/sclients.h:
+	* main/main.c:
+
+	  - Moved sclients event mutex to main event loop.
+
+	  - sclients.process() now calculates how many msecs before its next
+	    event is due. That is then used in the main loop block timeout.
+
+	  - sclients.process() no longer checks against duplicate frames.
+	    Each pulled frame is guaranteed unique since another check ensures
+	    that the minimum time between frames has elapsed before a new one
+	    is pulled.
+
 	* main/camera.c:
 	* main/camera.h:
 

@@ -7,7 +7,7 @@
 
 #define CAMWEBSRV_TAG "camwebsrv"
 
-#define CAMWEBSRV_MAIN_MSECS_PER_TICK 10
+#define CAMWEBSRV_MAIN_MIN_CYCLE_MSEC 10
 
 #define CAMWEBSRV_CFGMAN_FILENAME "config.cfg"
 #define CAMWEBSRV_CFGMAN_KEY_WIFI_SSID "wifi_ssid"
