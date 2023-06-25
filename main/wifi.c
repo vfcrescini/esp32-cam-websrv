@@ -14,15 +14,12 @@
 #include <esp_wifi.h>
 #include <esp_netif_ip_addr.h>
 
-#include <nvs_flash.h>
-
 #include <freertos/event_groups.h>
 
 #define _CAMWEBSRV_WIFI_ATTEMPT_LIMIT 5
 #define _CAMWEBSRV_WIFI_CONNECTED_BIT 0x00000001
 #define _CAMWEBSRV_WIFI_FAILED_BIT    0x00000002
 
-static esp_err_t _camwebsrv_wifi_nvs_init();
 static void _camwebsrv_wifi_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static unsigned int _camwebsrv_wifi_attempts = 0;
 
@@ -76,13 +73,6 @@ esp_err_t camwebsrv_wifi_init(camwebsrv_cfgman_t cfgman)
 
   // init wifi
  
-  rv = _camwebsrv_wifi_nvs_init();
-
-  if (rv != ESP_OK)
-  {
-    return rv;
-  }
-
   eg = xEventGroupCreate();
 
   rv = esp_netif_init();
@@ -166,34 +156,6 @@ esp_err_t camwebsrv_wifi_init(camwebsrv_cfgman_t cfgman)
   else
   {
     ESP_LOGE(CAMWEBSRV_TAG, "WIFI camwebsrv_wifi_init(): setup failed");
-  }
-
-  return ESP_OK;
-}
-
-static esp_err_t _camwebsrv_wifi_nvs_init()
-{
-  esp_err_t rv;
-
-  rv = nvs_flash_init();
-
-  if (rv == ESP_ERR_NVS_NO_FREE_PAGES || rv == ESP_ERR_NVS_NEW_VERSION_FOUND)
-  {
-    rv = nvs_flash_erase();
-
-    if (rv != ESP_OK)
-    {
-      ESP_LOGE(CAMWEBSRV_TAG, "WIFI _camwebsrv_wifi_nvs_init(): nvs_flash_erase() failed: [%d]: %s", rv, esp_err_to_name(rv));
-      return rv;
-    }
-
-    rv = nvs_flash_init();
-  }
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "WIFI _camwebsrv_wifi_nvs_init(): nvs_flash_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return rv;
   }
 
   return ESP_OK;

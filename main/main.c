@@ -12,6 +12,8 @@
 #include <esp_err.h>
 #include <esp_system.h>
 
+#include <nvs_flash.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -22,6 +24,29 @@ void app_main()
   camwebsrv_cfgman_t cfgman;
   camwebsrv_httpd_t httpd;
   SemaphoreHandle_t sema;
+
+  // initialise NVS
+
+  rv = nvs_flash_init();
+
+  if (rv == ESP_ERR_NVS_NO_FREE_PAGES || rv == ESP_ERR_NVS_NEW_VERSION_FOUND)
+  {
+    rv = nvs_flash_erase();
+
+    if (rv != ESP_OK)
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): nvs_flash_erase() failed: [%d]: %s", rv, esp_err_to_name(rv));
+      return;
+    }
+
+    rv = nvs_flash_init();
+  }
+
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): nvs_flash_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return;
+  }
 
   // initialise storage
 

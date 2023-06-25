@@ -1,3 +1,11 @@
+2023-06-25  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/wifi.c:
+	* main/main.c:
+
+	  - Moved NVS initialisation from wifi module to main.
+
+
 2023-03-06  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/httpd.c:
