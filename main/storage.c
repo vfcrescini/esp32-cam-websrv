@@ -72,7 +72,7 @@ esp_err_t camwebsrv_storage_get(const char *filename, camwebsrv_storage_cb_t cb,
   if (fd == -1)
   {
     int e = errno;
-    ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): open(%s) failed: [%d]: %s", path, errno, strerror(e));
+    ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): open(%s) failed: [%d]: %s", path, e, strerror(e));
     return ESP_FAIL;
   }
 
@@ -91,7 +91,7 @@ esp_err_t camwebsrv_storage_get(const char *filename, camwebsrv_storage_cb_t cb,
     if (n < 0)
     {
       int e = errno;
-      ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): read(%s) failed: [%d]: %s", path, errno, strerror(e));
+      ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): read(%s) failed: [%d]: %s", path, e, strerror(e));
       close(fd);
       return ESP_FAIL;
     }
@@ -112,7 +112,7 @@ esp_err_t camwebsrv_storage_get(const char *filename, camwebsrv_storage_cb_t cb,
     if (tptr == NULL)
     {
       int e = errno;
-      ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): realloc() failed: [%d]: %s", errno, strerror(e));
+      ESP_LOGE(CAMWEBSRV_TAG, "STORAGE camwebsrv_storage_get(): realloc() failed: [%d]: %s", e, strerror(e));
       free(tbuf);
       close(fd);
       return ESP_FAIL;

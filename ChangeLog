@@ -1,3 +1,10 @@
+2023-07-04  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/storage.c:
+
+	  - Use local copy of errno.
+
+
 2023-06-25  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/wifi.c:
