@@ -1,3 +1,15 @@
+2023-07-07  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/ping.c:
+	* main/ping.h:
+
+	  - Added pingger module.
+
+	* main/CMakeLists.txt:
+
+	  - Added lwip dependency.
+
+
 2023-07-04  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/storage.c:

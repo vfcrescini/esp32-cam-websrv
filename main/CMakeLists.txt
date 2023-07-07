@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 idf_component_register(
-  SRCS "main.c" "camera.c" "cfgman.c" "httpd.c" "sclients.c" "storage.c" "vbytes.c" "wifi.c"
-  PRIV_REQUIRES "esp_event" "esp_http_server" "esp_timer" "esp_wifi" "fatfs" "freertos" "nvs_flash" "vfs"
+  SRCS "main.c" "camera.c" "cfgman.c" "httpd.c" "ping.c" "sclients.c" "storage.c" "vbytes.c" "wifi.c"
+  PRIV_REQUIRES "esp_event" "esp_http_server" "esp_timer" "esp_wifi" "fatfs" "freertos" "lwip" "nvs_flash" "vfs"
   PRIV_INCLUDE_DIRS "."
 )
 
