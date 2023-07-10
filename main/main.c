@@ -11,6 +11,7 @@
 #include <esp_log.h>
 #include <esp_err.h>
 #include <esp_system.h>
+#include <esp_event.h>
 
 #include <nvs_flash.h>
 
@@ -45,6 +46,16 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): nvs_flash_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    return;
+  }
+
+  // create default event loop
+
+  rv = esp_event_loop_create_default();
+  
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "WIFI app_main(): esp_event_loop_create_default() failed: [%d]: %s", rv, esp_err_to_name(rv));
     return;
   }
 

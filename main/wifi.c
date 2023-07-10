@@ -83,14 +83,6 @@ esp_err_t camwebsrv_wifi_init(camwebsrv_cfgman_t cfgman)
     return rv;
   }
 
-  rv = esp_event_loop_create_default();
-
-  if (rv != ESP_OK)
-  {
-    ESP_LOGE(CAMWEBSRV_TAG, "WIFI camwebsrv_wifi_init(): esp_event_loop_create_default() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return rv;
-  }
-
   esp_netif_create_default_wifi_sta();
 
   rv = esp_wifi_init(&init_config);
