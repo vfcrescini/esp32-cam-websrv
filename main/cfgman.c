@@ -311,7 +311,7 @@ static bool _camwebsrv_cfgman_load_cb(const char *buf, size_t len, void *arg)
         continue;
       case 0x0A:
         line = line + 1;
-	break;
+        break;
     }
 
     // parse with an fsm
@@ -393,23 +393,23 @@ static bool _camwebsrv_cfgman_load_cb(const char *buf, size_t len, void *arg)
             return false;
           }
 
-	  ks = 0;
-	  ke = 0;
-	  vs = 0;
-	  ve = 0;
+          ks = 0;
+          ke = 0;
+          vs = 0;
+          ve = 0;
           state = 0;
         }
         else if (buf[i] != 0x20 && buf[i] != 0x09)
         {
           // start of value
-	  vs = i;
-	  ve = i;
+          vs = i;
+          ve = i;
           state = 5;
         }
         break;
       case 5:
         // value
-	if (buf[i] == 0x0a)
+        if (buf[i] == 0x0a)
         {
           // end of value
           if (!_camwebsrv_cfgman_set_subst(pcfg, buf, ks, ke, buf, vs, ve))
@@ -418,10 +418,10 @@ static bool _camwebsrv_cfgman_load_cb(const char *buf, size_t len, void *arg)
             return false;
           }
 
-	  ks = 0;
-	  ke = 0;
-	  vs = 0;
-	  ve = 0;
+          ks = 0;
+          ke = 0;
+          vs = 0;
+          ve = 0;
           state = 0;
         }
         else if (buf[i] == 0x20 || buf[i] == 0x09)
@@ -432,7 +432,7 @@ static bool _camwebsrv_cfgman_load_cb(const char *buf, size_t len, void *arg)
         else
         {
           // not EOL and not space; part of value
-	  ve = i;
+          ve = i;
         }
         break;
       case 6:
@@ -446,16 +446,16 @@ static bool _camwebsrv_cfgman_load_cb(const char *buf, size_t len, void *arg)
             return false;
           }
 
-	  ks = 0;
-	  ke = 0;
-	  vs = 0;
-	  ve = 0;
+          ks = 0;
+          ke = 0;
+          vs = 0;
+          ve = 0;
           state = 0;
         }
         else if (buf[i] != 0x20 && buf[i] != 0x09)
         {
           // not space; so this plus all previous spaces are part of value
-	  ve = i;
+          ve = i;
           state = 5;
         }
         break;
