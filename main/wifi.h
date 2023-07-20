@@ -9,6 +9,9 @@
 
 #include <esp_err.h>
 
-esp_err_t camwebsrv_wifi_init(camwebsrv_cfgman_t cfgman);
+typedef void *camwebsrv_wifi_t;
+
+esp_err_t camwebsrv_wifi_init(camwebsrv_wifi_t *wifi, camwebsrv_cfgman_t cfgman);
+esp_err_t camwebsrv_wifi_destroy(camwebsrv_wifi_t *wifi);
 
 #endif

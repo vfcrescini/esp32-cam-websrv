@@ -22,9 +22,10 @@
 void app_main()
 {
   esp_err_t rv;
-  camwebsrv_cfgman_t cfgman;
-  camwebsrv_httpd_t httpd;
   SemaphoreHandle_t sema;
+  camwebsrv_cfgman_t cfgman = NULL;
+  camwebsrv_wifi_t wifi = NULL;
+  camwebsrv_httpd_t httpd = NULL;
 
   // initialise NVS
 
@@ -91,7 +92,7 @@ void app_main()
 
   // initialise wifi
 
-  rv = camwebsrv_wifi_init(cfgman);
+  rv = camwebsrv_wifi_init(&wifi, cfgman);
 
   if (rv != ESP_OK)
   {
