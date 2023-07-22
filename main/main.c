@@ -38,7 +38,7 @@ void app_main()
     if (rv != ESP_OK)
     {
       ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): nvs_flash_erase() failed: [%d]: %s", rv, esp_err_to_name(rv));
-      return;
+      goto camwebsrv_main_error;
     }
 
     rv = nvs_flash_init();
@@ -47,7 +47,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): nvs_flash_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // create default event loop
@@ -57,7 +57,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "WIFI app_main(): esp_event_loop_create_default() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // initialise storage
@@ -67,7 +67,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_storage_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // initialise config manager
@@ -77,7 +77,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_cfgman_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // load config
@@ -87,7 +87,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_cfgman_load(%s) failed: [%d]: %s", CAMWEBSRV_CFGMAN_FILENAME, rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // initialise wifi
@@ -97,7 +97,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_wifi_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // initialise sema
@@ -107,7 +107,7 @@ void app_main()
   if (sema == NULL)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): xSemaphoreCreateBinary() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // initialise web server
@@ -117,7 +117,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_httpd_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // start web server
@@ -127,7 +127,7 @@ void app_main()
   if (rv != ESP_OK)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_httpd_start() failed: [%d]: %s", rv, esp_err_to_name(rv));
-    return;
+    goto camwebsrv_main_error;
   }
 
   // process stream requests indefinitely
@@ -141,11 +141,18 @@ void app_main()
     if (rv != ESP_OK)
     {
       ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_httpd_process() failed: [%d]: %s", rv, esp_err_to_name(rv));
-      return;
+      goto camwebsrv_main_error;
     }
 
     // block until there is actually something to do
 
     xSemaphoreTake(sema, (nextevent == UINT16_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(nextevent));
   }
+
+  camwebsrv_main_error:
+
+  ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): Rebooting in %d seconds", CAMWEBSRV_MAIN_REBOOT_DELAY_MSEC / 1000);
+  vTaskDelay(pdMS_TO_TICKS(CAMWEBSRV_MAIN_REBOOT_DELAY_MSEC));
+  esp_restart();
+  return;
 }

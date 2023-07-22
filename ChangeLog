@@ -1,5 +1,14 @@
 2023-07-22  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+
+	  - Added new CAMWEBSRV_MAIN_REBOOT_DELAY_MSEC config parameter.
+
+	* main/main.c:
+
+	  - Will now automatically reboot after a preconfigured delay when an
+	    error occurrs.
+
 	* main/wifi.c:
 
 	  - camwebsrv_wifi_init() now returns ESP_ERR_TIMEOUT when it times
