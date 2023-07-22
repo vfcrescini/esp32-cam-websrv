@@ -179,6 +179,7 @@ esp_err_t camwebsrv_wifi_init(camwebsrv_wifi_t *wifi, camwebsrv_cfgman_t cfgman)
   if ((bits & _CAMWEBSRV_WIFI_STATE_STARTED) == 0x00)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "WIFI camwebsrv_wifi_init(): Timed out while waiting for _CAMWEBSRV_WIFI_STATE_STARTED");
+    rv = ESP_ERR_TIMEOUT;
     goto _camwebsrv_wifi_start_return6;
   }
 
@@ -205,6 +206,7 @@ esp_err_t camwebsrv_wifi_init(camwebsrv_wifi_t *wifi, camwebsrv_cfgman_t cfgman)
   if ((bits & _CAMWEBSRV_WIFI_STATE_CONNECTED) == 0x00)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "WIFI camwebsrv_wifi_init(): Timed out while waiting for _CAMWEBSRV_WIFI_STATE_CONNECTED");
+    rv = ESP_ERR_TIMEOUT;
     goto _camwebsrv_wifi_start_return7;
   }
 
