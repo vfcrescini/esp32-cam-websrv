@@ -228,8 +228,8 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
           pping->teventlast = tnow;
           pping->teventnext = tnow;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
-          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to SENT");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
+          ESP_LOGV(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to SENT");
 
           continue;
         }
@@ -242,7 +242,7 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
           pping->teventlast = tnow;
           pping->teventnext = tnow + CAMWEBSRV_PING_WAIT_INTERVAL;
           
-          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to BLCK");
+          ESP_LOGV(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to BLCK");
 
           if (nextevent != NULL && *nextevent > (pping->teventnext - tnow))
           {
@@ -283,8 +283,8 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
           pping->teventlast = tnow;
           pping->teventnext = tnow;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
-          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from BLCK to SENT");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
+          ESP_LOGV(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from BLCK to SENT");
 
           continue;
         }
@@ -358,8 +358,8 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
           pping->teventlast = tnow;
           pping->teventnext = tnow + CAMWEBSRV_PING_CYCLE_INTERVAL;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING response received");
-          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from SENT to WAIT");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING response received");
+          ESP_LOGV(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from SENT to WAIT");
 
           continue;
         }
@@ -404,7 +404,7 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
         pping->teventlast = tnow;
         pping->teventnext = tnow;
 
-        ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from WAIT to INIT");
+        ESP_LOGV(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from WAIT to INIT");
 
         continue;
 

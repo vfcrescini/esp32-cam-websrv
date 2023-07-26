@@ -1,6 +1,13 @@
 2023-07-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* main/config.h:
+
+	  - CAMWEBSRV_PING_CYCLE_INTERVAL: ping interval is now 30 secs.
+
 	* main/ping.c:
+
+	  - Ping success log events are now logged only at DEBUG and VERBOSE
+	    log levels.
 
 	  - If ping_host is unset, or set to an empty string, the ping module
 	    will be disabled.
