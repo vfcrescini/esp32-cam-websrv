@@ -18,6 +18,7 @@ https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/
 * Multiple clients can view the MJPEG stream simultaneously.
 * Added stream framerate control (1 FPS min, 8 FPS max, 4 FPS default).
 * Added camera reset button.
+* Added custom lightweight ping module to check network connectivity, without the overheads of creating a new session task when using ``esp_ping_*()`` from the ICMP Echo API.
 
 ## Build dependency components
 
@@ -35,7 +36,17 @@ https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/
 
 Configure, build and flash using the _usual_ IDF tools:
 
-1. Clean
+1. Tune configuration
+
+   1. Optionally tweak hard-coded configuration paramerers in ``main/config.h``.
+
+   2. Set WIFI and networking configuration parameters in ``storage/config.cfg``.
+
+      * ``wifi_ssid``: Set to the AP SSID to connect to.
+      * ``wifi_pass``: Set to the WPA/2 PSK passphrase.
+      * ``ping_host``: Set to IP of host to send ping probes to, or leave blank to disable ping probes.
+
+2. Clean
 
     ```
     $ idf.py fullclean
@@ -44,7 +55,7 @@ Configure, build and flash using the _usual_ IDF tools:
     Done
     ```
 
-2. Set target
+3. Set target
 
     ```
     $ idf.py set-target esp32
@@ -55,7 +66,7 @@ Configure, build and flash using the _usual_ IDF tools:
     -- Build files have been written to: /tmp/esp32-cam-websrv/build
     ```
 
-3. Build
+4. Build
 
     ```
     $ idf.py build
@@ -66,7 +77,7 @@ Configure, build and flash using the _usual_ IDF tools:
 
     ```
 
-4. Upload to the ESP32-CAM board, assuming that it is connected to `/dev/ttyUSB0`
+5. Upload to the ESP32-CAM board, assuming that it is connected to `/dev/ttyUSB0`
     ```
     $ idf.py -p /dev/ttyUSB0 flash
     Executing action: flash
