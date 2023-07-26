@@ -5,6 +5,7 @@
 #include "config.h"
 #include "cfgman.h"
 #include "httpd.h"
+#include "ping.h"
 #include "storage.h"
 #include "wifi.h"
 
@@ -24,8 +25,9 @@ void app_main()
   esp_err_t rv;
   SemaphoreHandle_t sema;
   camwebsrv_cfgman_t cfgman = NULL;
-  camwebsrv_wifi_t wifi = NULL;
   camwebsrv_httpd_t httpd = NULL;
+  camwebsrv_ping_t ping = NULL;
+  camwebsrv_wifi_t wifi = NULL;
 
   // initialise NVS
 
@@ -100,6 +102,16 @@ void app_main()
     goto camwebsrv_main_error;
   }
 
+  // initialise ping
+
+  rv = camwebsrv_ping_init(&ping, cfgman);
+  
+  if (rv != ESP_OK)
+  {
+    ESP_LOGE(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_ping_init() failed: [%d]: %s", rv, esp_err_to_name(rv));
+    goto camwebsrv_main_error;
+  }
+
   // initialise sema
 
   sema = xSemaphoreCreateBinary();
@@ -135,6 +147,18 @@ void app_main()
   while(1)
   {
     uint16_t nextevent = UINT16_MAX;
+
+    // ping
+
+    rv = camwebsrv_ping_process(ping, &nextevent);
+
+    if (rv != ESP_OK)
+    {
+      ESP_LOGW(CAMWEBSRV_TAG, "MAIN app_main(): camwebsrv_ping_process() failed: [%d]: %s", rv, esp_err_to_name(rv));
+      goto camwebsrv_main_error;
+    }
+
+    // httpd
 
     rv = camwebsrv_httpd_process(httpd, &nextevent);
 
