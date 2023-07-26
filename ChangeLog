@@ -1,10 +1,17 @@
+2023-07-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/ping.c:
+
+	  - If ping_host is unset, or set to an empty string, the ping module
+	    will be disabled.
+
+
 2023-07-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/main.c:
 
 	  - Call camwebsrv_ping_process() from main event loop. Trigger
 	    delayed restart if ping fails.
-
 
 	* main/ping.c:
 

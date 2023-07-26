@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <errno.h>
 
 #include <lwip/inet.h>
@@ -41,6 +42,7 @@ typedef struct
   int64_t teventlast;
   int64_t teventnext;
   uint8_t timeouts;
+  bool enabled;
 } _camwebsrv_ping_t;
 
 static esp_err_t _camwebsrv_ping_get_ip(const char *host, uint32_t *ip);
@@ -64,43 +66,51 @@ esp_err_t camwebsrv_ping_init(camwebsrv_ping_t *ping, camwebsrv_cfgman_t cfgman)
 
   rv = camwebsrv_cfgman_get(cfgman, CAMWEBSRV_CFGMAN_KEY_PING_HOST, &host);
 
-  if (rv != ESP_OK)
+  if (rv != ESP_OK && rv != ESP_ERR_NOT_FOUND)
   {
     ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): camwebsrv_cfgman_get(%s) failed: [%d]: %s", CAMWEBSRV_CFGMAN_KEY_PING_HOST, rv, esp_err_to_name(rv));
     return rv;
   }
 
-  // get ip
+  // if a host was supplied, get ip
 
-  rv = _camwebsrv_ping_get_ip(host, &ip);
-
-  if (rv != ESP_OK)
+  if (rv == ESP_OK && host != NULL && strlen(host) > 0)
   {
-    ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): _camwebsrv_ping_get_ip(%s) failed: [%d]: %s", host, rv, esp_err_to_name(rv));
-    return rv;
+    rv = _camwebsrv_ping_get_ip(host, &ip);
+
+    if (rv != ESP_OK)
+    {
+      ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): _camwebsrv_ping_get_ip(%s) failed: [%d]: %s", host, rv, esp_err_to_name(rv));
+      return rv;
+    }
   }
 
-  // initialise socket
+  // if we have an IP
 
-  sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-
-  if (sock < 0)
+  if (ip != 0)
   {
-    int e = errno;
-    ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): socket() failed: [%d]: %s", e, strerror(e));
-    return ESP_FAIL;
-  }
+    // initialise socket
 
-  // set non-blocking
+    sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
-  rv = fcntl(sock, F_SETFL, O_NONBLOCK);
+    if (sock < 0)
+    {
+      int e = errno;
+      ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): socket() failed: [%d]: %s", e, strerror(e));
+      return ESP_FAIL;
+    }
 
-  if (rv == -1)
-  {
-    int e = errno;
-    ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): fcntl() failed: [%d]: %s", e, strerror(e));
-    close(sock);
-    return ESP_FAIL;
+    // set non-blocking
+
+    rv = fcntl(sock, F_SETFL, O_NONBLOCK);
+
+    if (rv == -1)
+    {
+      int e = errno;
+      ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): fcntl() failed: [%d]: %s", e, strerror(e));
+      close(sock);
+      return ESP_FAIL;
+    }
   }
 
   // allocate space for new structure
@@ -111,7 +121,10 @@ esp_err_t camwebsrv_ping_init(camwebsrv_ping_t *ping, camwebsrv_cfgman_t cfgman)
   {
     int e = errno;
     ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): malloc() failed: [%d]: %s", e, strerror(e));
-    close(sock);
+    if (ip != 0)
+    {
+      close(sock);
+    }
     return ESP_ERR_NO_MEM;
   }
 
@@ -119,11 +132,21 @@ esp_err_t camwebsrv_ping_init(camwebsrv_ping_t *ping, camwebsrv_cfgman_t cfgman)
 
   memset(pping, 0x00, sizeof(_camwebsrv_ping_t));
 
-  pping->sock = sock;
-  pping->addr.sin_family = AF_INET;
-  pping->addr.sin_addr.s_addr = ip;
-  pping->state = _CAMWEBSRV_PING_STATE_INIT;
-  pping->header.type = ICMP_ECHO;
+  if (ip != 0)
+  {
+    pping->sock = sock;
+    pping->addr.sin_family = AF_INET;
+    pping->addr.sin_addr.s_addr = ip;
+    pping->state = _CAMWEBSRV_PING_STATE_INIT;
+    pping->header.type = ICMP_ECHO;
+    pping->enabled = true;
+    ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): enabled; using %s", inet_ntoa(pping->addr.sin_addr));
+  }
+  else
+  {
+    pping->enabled = false;
+    ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_init(): disabled");
+  }
 
   *ping = (camwebsrv_ping_t) pping;
 
@@ -141,7 +164,10 @@ esp_err_t camwebsrv_ping_destroy(camwebsrv_ping_t *ping)
 
   pping = (_camwebsrv_ping_t *) *ping;
 
-  close(pping->sock);
+  if (pping->enabled)
+  {
+    close(pping->sock);
+  }
 
   free(pping);
 
@@ -162,6 +188,13 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
   }
 
   pping = (_camwebsrv_ping_t *) ping;
+
+  // are we enabled?
+
+  if (!pping->enabled)
+  {
+    return ESP_OK;
+  }
 
   // are any events due?
 
