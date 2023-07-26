@@ -2,9 +2,19 @@
 
 	* main/config.h:
 
+	  - CAMWEBSRV_PING_TIMEOUT_INIT: renamed to CAMWEBSRV_PING_TIMEOUT_SEND
+
+	  - CAMWEBSRV_PING_TIMEOUT_SENT: renamed to CAMWEBSRV_PING_TIMEOUT_RECV
+
 	  - CAMWEBSRV_PING_CYCLE_INTERVAL: ping interval is now 30 secs.
 
 	* main/ping.c:
+
+	  - Consolidated states INIT and BLCK.
+
+	  - Renamed states INIT and SENT to SEND and RECV, respectively.
+
+	  - Fixed off-by-one timeout counter bug.
 
 	  - Ping success log events are now logged only at DEBUG and VERBOSE
 	    log levels.
