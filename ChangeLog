@@ -1,3 +1,13 @@
+2023-07-26  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
+	* main/ping.c:
+
+	  - camwebsrv_ping_process(): Fixed nextevent.
+
+	  - camwebsrv_ping_process(): Returns without doing anything if called
+	    before next event is due.
+
+
 2023-07-22  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
 	* main/config.h:

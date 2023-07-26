@@ -23,9 +23,11 @@
 // maximum possbile IPv4 header + minimum ICMP header
 
 #define _CAMWEBSRV_PING_PACKET_LEN 68
-#define _CAMWEBSRV_PING_TIMEOUT_BLCK 10000
-#define _CAMWEBSRV_PING_TIMEOUT_SENT 30000
-#define _CAMWEBSRV_PING_TIMEOUT_WAIT 30000
+#define _CAMWEBSRV_PING_TIMEOUT_MAX 3
+#define _CAMWEBSRV_PING_TIMEOUT_BLCK 5000
+#define _CAMWEBSRV_PING_TIMEOUT_SENT 5000
+#define _CAMWEBSRV_PING_WAIT_INTERVAL 1000
+#define _CAMWEBSRV_PING_CYCLE_INTERVAL 15000
 
 typedef enum
 {
@@ -41,7 +43,9 @@ typedef struct
   struct sockaddr_in addr;
   _camwebsrv_ping_state_t state;
   struct icmp_echo_hdr header;
-  int64_t lastevent;
+  int64_t teventlast;
+  int64_t teventnext;
+  uint8_t timeouts;
 } _camwebsrv_ping_t;
 
 static esp_err_t _camwebsrv_ping_get_ip(const char *host, uint32_t *ip);
@@ -155,6 +159,7 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 {
   esp_err_t rv;
   _camwebsrv_ping_t *pping;
+  int64_t tnow;
 
   if (ping == NULL)
   {
@@ -163,12 +168,22 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 
   pping = (_camwebsrv_ping_t *) ping;
 
+  // are any events due?
+
+  tnow = esp_timer_get_time() / 1000;
+
+  if (pping->teventnext > 0 && tnow < pping->teventnext)
+  {
+    if (nextevent != NULL)
+    {
+      *nextevent = pping->teventnext - tnow;
+    }
+
+    return ESP_OK;
+  }
+
   while(1)
   {
-    int64_t now = esp_timer_get_time() / 1000;
-
-    ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state %d", pping->state);
-
     switch(pping->state)
     {
       case _CAMWEBSRV_PING_STATE_INIT:
@@ -177,30 +192,33 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 
         rv = _camwebsrv_ping_send(pping);
 
-        // send successful so, note the time of last event, then proceed to SENT state
+        // send successful so progress to SENT state
   
         if (rv == ESP_OK)
         {
           pping->state = _CAMWEBSRV_PING_STATE_SENT;
-          pping->lastevent = now;
+          pping->teventlast = tnow;
+          pping->teventnext = tnow;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to SENT");
+          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to SENT");
 
           continue;
         }
 
-        // if we can't send, so note the time of last event, then proceed to BLCK state
+        // if we can't send, progress to BLCK state
 
         if (rv == ESP_ERR_NOT_FINISHED)
         {
           pping->state = _CAMWEBSRV_PING_STATE_BLCK;
-          pping->lastevent = now;
+          pping->teventlast = tnow;
+          pping->teventnext = tnow + _CAMWEBSRV_PING_WAIT_INTERVAL;
           
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to BLCK");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from INIT to BLCK");
 
-          if (*nextevent > 1000)
+          if (nextevent != NULL && *nextevent > (pping->teventnext - tnow))
           {
-             *nextevent = 1000;
+            *nextevent = pping->teventnext - tnow;
           }
 
           return ESP_OK;
@@ -215,27 +233,30 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
       case _CAMWEBSRV_PING_STATE_BLCK:
 
         // attempted a send
+
         // have we exceeded the time limit?
 
-        if (now >= (pping->lastevent + _CAMWEBSRV_PING_TIMEOUT_BLCK))
+        if (tnow >= (pping->teventlast + _CAMWEBSRV_PING_TIMEOUT_BLCK))
         {
           ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): timeout on state BLCK");
 
-          return ESP_ERR_TIMEOUT;
+          return ESP_FAIL;
         }
 
         // try to send again
 
         rv = _camwebsrv_ping_send(pping);
 
-        // send successful so note the time of last event, then proceed to SENT state
+        // send successful so progress to SENT state
   
         if (rv == ESP_OK)
         {
           pping->state = _CAMWEBSRV_PING_STATE_SENT;
-          pping->lastevent = now;
+          pping->teventlast = tnow;
+          pping->teventnext = tnow;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from BLCK to SENT");
+          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING request sent");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from BLCK to SENT");
 
           continue;
         }
@@ -244,9 +265,11 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 
         if (rv == ESP_ERR_NOT_FINISHED)
         {
-          if (*nextevent > 1000)
+          pping->teventnext = tnow + _CAMWEBSRV_PING_WAIT_INTERVAL;
+
+          if (nextevent != NULL && *nextevent > (pping->teventnext - tnow))
           {
-             *nextevent = 1000;
+            *nextevent = pping->teventnext - tnow;
           }
 
           return ESP_OK;
@@ -263,25 +286,52 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
         // waiting for echo response
         // have we exceeded the time limit?
 
-        if (now >= (pping->lastevent + _CAMWEBSRV_PING_TIMEOUT_SENT))
+        if (tnow >= (pping->teventlast + _CAMWEBSRV_PING_TIMEOUT_SENT))
         {
-          ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): timeout on state SENT");
+          ESP_LOGW(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): timeout %d on state SENT", pping->timeouts);
 
-          return ESP_ERR_TIMEOUT;
+          // have we exceeded the maximum allowed timed-out responses?
+          // if so, return special timeout status code and reset, in case caller
+          // wants to ignore
+
+          if (pping->timeouts > _CAMWEBSRV_PING_TIMEOUT_MAX)
+          {
+            ESP_LOGE(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): exceeded maximum allowable missed responses");
+
+            pping->state = _CAMWEBSRV_PING_STATE_INIT;
+            pping->timeouts = 0;
+            pping->teventlast = 0;
+            pping->teventnext = 0;
+
+            return ESP_ERR_TIMEOUT;
+          }
+
+          // okay, we've timed out while waiting for a response, but we haven't
+          // exceeded the limit, so send another request immediately
+
+          pping->timeouts = pping->timeouts + 1;
+          pping->state = _CAMWEBSRV_PING_STATE_INIT;
+          pping->teventlast = tnow;
+          pping->teventnext = tnow;
+
+          continue;
         }
 
         // try to recv
 
         rv = _camwebsrv_ping_recv(pping);
 
-        // recv success, so note time of last event, then  proceed to WAIT state
+        // recv success so progress to WAIT state
 
         if (rv == ESP_OK)
         {
           pping->state = _CAMWEBSRV_PING_STATE_WAIT;
-          pping->lastevent = now;
+          pping->timeouts = 0;
+          pping->teventlast = tnow;
+          pping->teventnext = tnow + _CAMWEBSRV_PING_CYCLE_INTERVAL;
 
-          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from SENT to WAIT");
+          ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): PING response received");
+          ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from SENT to WAIT");
 
           continue;
         }
@@ -290,9 +340,11 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 
         if (rv == ESP_ERR_NOT_FINISHED)
         {
-          if (*nextevent > 1000)
+          pping->teventnext = tnow + _CAMWEBSRV_PING_WAIT_INTERVAL;
+
+          if (nextevent != NULL && *nextevent > (pping->teventnext - tnow))
           {
-             *nextevent = 1000;
+            *nextevent = pping->teventnext - tnow;
           }
 
           return ESP_OK;
@@ -308,20 +360,23 @@ esp_err_t camwebsrv_ping_process(camwebsrv_ping_t ping, uint16_t *nextevent)
 
         // is it time for the next cycle yet?
 
-        if (now < (pping->lastevent + _CAMWEBSRV_PING_TIMEOUT_WAIT))
+        if (tnow < pping->teventnext)
         {
-          if (*nextevent > 1000)
+          if (nextevent != NULL && *nextevent > (pping->teventnext - tnow))
           {
-             *nextevent = 1000;
+            *nextevent = pping->teventnext - tnow;
           }
 
           return ESP_OK;
         }
 
-        pping->state = _CAMWEBSRV_PING_STATE_INIT;
-        pping->lastevent = now;
+        // time for another cycle
 
-        ESP_LOGI(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from WAIT to INIT");
+        pping->state = _CAMWEBSRV_PING_STATE_INIT;
+        pping->teventlast = tnow;
+        pping->teventnext = tnow;
+
+        ESP_LOGD(CAMWEBSRV_TAG, "PING camwebsrv_ping_process(): state transition from WAIT to INIT");
 
         continue;
 
