@@ -1,5 +1,10 @@
 2023-07-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
 
+	* Merged changes from esp32-cam-websrv-0.1.0.br-fix_wifi-1.
+
+
+2023-07-27  Vino Fernando Crescini  <vfcrescini@gmail.com>
+
 	* VERSION:
 
 	  - Updated to 0.1.0-br-fix_wifi-1.
